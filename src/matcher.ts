@@ -15,7 +15,10 @@ export interface AudioMatcher {
 export class ClapMatcher implements AudioMatcher {
   private clf: any;
   async load(onProgress?: (pct: number) => void) {
-    const { pipeline } = await import("@huggingface/transformers");
+    const { pipeline, env } = await import("@huggingface/transformers");
+    env.allowLocalModels = false;
+    // ONNX wasm is served from our own origin (copied to public/ort) so inference works offline.
+    (env.backends.onnx as any).wasm.wasmPaths = import.meta.env.BASE_URL + "ort/";
     this.clf = await (pipeline as any)("zero-shot-audio-classification", CONFIG.model.id, {
       dtype: CONFIG.model.dtype,
       progress_callback: (p: any) => p?.progress != null && onProgress?.(Math.round(p.progress)),
@@ -44,3 +47,12 @@ export class MockMatcher implements AudioMatcher {
 
 export const createMatcher = (): AudioMatcher =>
   new URLSearchParams(location.search).has("mock") ? new MockMatcher() : new ClapMatcher();
+
+/** Is the model already in the browser cache (i.e. usable with no network)? */
+export async function modelInstalled(): Promise<boolean> {
+  try {
+    if (new URLSearchParams(location.search).has("mock")) return true;
+    const keys = await (await caches.open("transformers-cache")).keys();
+    return keys.some((k) => k.url.includes(CONFIG.model.id) && k.url.includes(".onnx"));
+  } catch { return false; }
+}

@@ -8,7 +8,10 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "dev:https": "vite --mode https"
+    "dev:https": "vite --mode https",
+    "predev": "node scripts/copy-ort.mjs",
+    "prebuild": "node scripts/copy-ort.mjs",
+    "predev:https": "node scripts/copy-ort.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.0.0",

@@ -1,54 +1,47 @@
 # Open When
 
-A message that opens only when the real world matches a condition.
-Write a message, choose something to hear, pocket the phone, walk. A local
-open-weight audio-text model (CLAP, via Transformers.js) listens and unlocks it.
+**The world is the password.** Write a sealed message, choose a sound, go outside. A local
+open-weight audio model listens through your phone's microphone and unlocks the letter when
+the world matches. The AI never writes the message and the audio never leaves the device.
 
 ```
-mic -> short windows -> AudioMatcher (CLAP) -> score -> Detector (smoothing) -> unlock
+mic -> Audio Engine (5s windows) -> AudioMatcher (CLAP, local) -> score
+    -> Detector (smoothing + N-of-M + sustained 4s + cooldown) -> State machine -> unlock
 ```
+
+## Why local, open-weight AI
+The input is the environment, which is private. People walk out of signal. Local inference means
+no audio upload, no server dependency, no per-call cost, and a model you can swap
+(`src/matcher.ts` is the only file that knows which model runs).
 
 ## Run
 ```bash
 npm install
-npm run dev      # then open on your phone
-npm test
-npm run build    # static output in dist/
+npm run dev:https   # self-signed HTTPS so a phone on your Wi-Fi gets microphone access
+npm test            # 19 tests: cards, conditions, detector, state machine, recovery, matcher
+npm run build       # static dist/ (deploy to Vercel/Netlify); set VITE_PUBLIC_URL for share links
 ```
-Microphone access needs **HTTPS** (or localhost). To test on a phone, deploy `dist/`
-to Vercel/Netlify/GitHub Pages, or tunnel the dev server (e.g. `cloudflared`, `ngrok`).
+`predev`/`prebuild` copy the ONNX runtime wasm to `public/ort` so inference never needs a CDN.
 
-The model (~45MB) downloads once from the Hugging Face hub, is cached by the browser,
-and inference runs on-device. Raw audio is never uploaded. To go fully offline, host
-the model files yourself (see `models/` note below) and set `env.localModelPath`.
+## Offline
+After one online visit: the app shell is cached by `public/sw.js`, the model by Transformers.js
+(Cache API), the wasm by the service worker. The Ready screen reports model state honestly
+("Not installed", needs network once). Letters and the in-progress session persist in localStorage;
+a reload mid-walk returns to Ready with the session clock intact (a mic needs a fresh tap).
 
-`?mock=1` swaps in a loudness-based matcher so you can test the UI without the model.
+## Model
+`Xenova/clap-htsat-unfused` (ONNX conversion of LAION CLAP), loaded `q8`. License believed
+Apache-2.0; size, latency and accuracy are **not yet measured**: check the model card, then fill in
+real numbers from `?debug` on your phone. Weak spots expected: faint targets, wind, overlapping sounds.
 
-## Test on a phone (microphone needs HTTPS)
-- **Fastest:** `npm run dev:https`, open the `https://192.168.x.x:5173` address on your phone,
-  accept the self-signed certificate warning.
-- **Real demo:** `npm run build`, then deploy `dist/` (e.g. `npx vercel dist`). Create cards
-  *from the deployed URL*, or paste your deployed address into the box that appears when the
-  link would point at localhost. Optionally set `VITE_PUBLIC_URL=https://your-app.vercel.app`.
+## Debug / field test
+`?debug` (or the Debug button while listening): mic state and rate, RMS, inference ms, the full score
+breakdown vs rival sounds, margin, smoothed score, detector hits. "Score a sound file" separates
+capture problems from model problems. `?mock=1` swaps in a loudness matcher for UI testing.
 
-## Calibrate outdoors
-Open the app with `?debug` (or tap **Debug** while listening). It shows mic state and
-sample rate, RMS level, the model's scores for the condition vs rival sounds, margin,
-smoothed score, and detector hits. "Score a sound file" runs a recording through the same
-model, which tells you whether a problem is mic capture or the model. Then set thresholds in `src/config.ts`.
-
-## Layout
-- `src/config.ts` - every tunable (model, window sizes, thresholds, feedback timing)
-- `src/matcher.ts` - `AudioMatcher` interface + `ClapMatcher` (swap models here only)
-- `src/audio.ts` - mic capture, rolling windows, resampling, beeps/haptics
-- `src/detector.ts` - EMA smoothing + N-of-M confirmation, no single-frame unlocks
-- `src/card.ts` - card payload <-> URL hash (no backend)
-- `src/main.tsx` - Home / Create / Listen / Unlocked
-
-## Known limits
-- Screen lock can suspend mic capture in mobile browsers. The app requests a screen
-  wake lock; keep the screen on and the phone in a pocket.
-- Haptics: `navigator.vibrate` works on Android, not iOS Safari (audio cues still do).
-- Tune `CONFIG.detection` outdoors; thresholds are starting points, not truth.
-- Card links contain the message in the URL hash (never sent to a server by the browser),
-  but anyone with the link can read it.
+## Limits
+- Locked screens can suspend mic capture in mobile browsers; a screen wake lock is requested, so keep the screen on in your pocket.
+- Haptics: Android only. iOS gets audio cues.
+- Only single "hear" conditions run; the condition model already types SEE/FIND/REACH/THEN (`src/condition.ts`) but rejects them.
+- Thresholds in `src/config.ts` are uncalibrated placeholders.
+- Link payload lives in the URL hash (never sent to a server) but anyone with the link can read the message.
