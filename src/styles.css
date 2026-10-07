@@ -41,3 +41,5 @@ hr { border: 0; border-top: 1px solid var(--line); width: 100%; margin: 0; }
 .dot.high, .dot.confirmed { opacity: 1; animation-duration: 0.8s; }
 @keyframes breathe { 50% { transform: scale(1.9); } }
 @media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
+.debug { font: 0.72rem/1.5 var(--mono); border: 1px solid var(--line); padding: 0.8rem; margin: 0; overflow-x: auto; white-space: pre; }
+input[type="file"] { display: block; margin-top: 0.5rem; color: var(--fg); font: 0.75rem var(--mono); }

@@ -24,6 +24,19 @@ the model files yourself (see `models/` note below) and set `env.localModelPath`
 
 `?mock=1` swaps in a loudness-based matcher so you can test the UI without the model.
 
+## Test on a phone (microphone needs HTTPS)
+- **Fastest:** `npm run dev:https`, open the `https://192.168.x.x:5173` address on your phone,
+  accept the self-signed certificate warning.
+- **Real demo:** `npm run build`, then deploy `dist/` (e.g. `npx vercel dist`). Create cards
+  *from the deployed URL*, or paste your deployed address into the box that appears when the
+  link would point at localhost. Optionally set `VITE_PUBLIC_URL=https://your-app.vercel.app`.
+
+## Calibrate outdoors
+Open the app with `?debug` (or tap **Debug** while listening). It shows mic state and
+sample rate, RMS level, the model's scores for the condition vs rival sounds, margin,
+smoothed score, and detector hits. "Score a sound file" runs a recording through the same
+model, which tells you whether a problem is mic capture or the model. Then set thresholds in `src/config.ts`.
+
 ## Layout
 - `src/config.ts` - every tunable (model, window sizes, thresholds, feedback timing)
 - `src/matcher.ts` - `AudioMatcher` interface + `ClapMatcher` (swap models here only)

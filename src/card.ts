@@ -44,7 +44,15 @@ export function decodeCard(payload: string): Card | null {
   }
 }
 
-export const cardUrl = (c: Card, base = location.origin + location.pathname) => `${base}#c=${encodeCard(c)}`;
+export const cardUrl = (c: Card, base: string) => `${base.split("#")[0].split("?")[0]}#c=${encodeCard(c)}`;
+
+// A link built on localhost / a LAN address only works on the machine that made it.
+export function isLocalBase(url: string): boolean {
+  try {
+    const h = new URL(url).hostname;
+    return /^(localhost|127\.|0\.0\.0\.0|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h) || h === "[::1]" || h.endsWith(".local");
+  } catch { return true; }
+}
 
 export function cardFromHash(hash: string): Card | null {
   const m = hash.match(/c=([^&]+)/);

@@ -1,7 +1,7 @@
 import { CONFIG } from "./config";
 
 export type Level = "none" | "low" | "medium" | "high" | "confirmed";
-export interface Reading { raw: number; smoothed: number; level: Level }
+export interface Reading { raw: number; smoothed: number; level: Level; hits: number }
 type Params = typeof CONFIG.detection;
 
 // Never unlocks from one noisy frame: EMA smoothing + N-of-M agreement.
@@ -21,7 +21,7 @@ export class Detector {
     else if (smoothed >= this.p.high) level = "high";
     else if (smoothed >= this.p.medium) level = "medium";
     else if (smoothed >= this.p.low) level = "low";
-    return { raw, smoothed, level };
+    return { raw, smoothed, level, hits };
   }
 
   reset() { this.ema = null; this.recent = []; }

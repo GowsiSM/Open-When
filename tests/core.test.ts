@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { conditionPhrase, decodeCard, encodeCard, makeCard } from "../src/card";
+import { cardUrl, conditionPhrase, decodeCard, encodeCard, isLocalBase, makeCard } from "../src/card";
 import { Detector } from "../src/detector";
 import { resample } from "../src/audio";
 
@@ -15,6 +15,19 @@ describe("cards", () => {
   it("extracts the sound phrase", () => {
     expect(conditionPhrase("Open when you hear running water.")).toBe("running water");
     expect(conditionPhrase("birds")).toBe("birds");
+  });
+});
+
+describe("share links", () => {
+  const c = makeCard({ condition: "birds", message: "hi" });
+  it("uses the given public base and strips stale hash/query", () => {
+    const u = cardUrl(c, "https://open-when.vercel.app/?debug=1#old");
+    expect(u.startsWith("https://open-when.vercel.app/#c=")).toBe(true);
+    expect(decodeCard(u.split("c=")[1])).toEqual(c);
+  });
+  it("flags localhost and LAN origins", () => {
+    ["http://localhost:5173/", "http://192.168.1.20:5173/", "https://x.local/"].forEach((u) => expect(isLocalBase(u)).toBe(true));
+    expect(isLocalBase("https://open-when.vercel.app/")).toBe(false);
   });
 });
 
