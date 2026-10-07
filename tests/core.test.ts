@@ -132,3 +132,47 @@ describe("offline model states", () => {
   });
   it("labels unmeasured improvements as such", () => { expect(IMPROVEMENT.filter((i) => i.status === "planned").length).toBeGreaterThan(1); });
 });
+
+import { readFileSync } from "node:fs";
+import { THEME_COLOR, nextTheme, resolveMode, themeLabel } from "../src/theme";
+import { RunLog, csvCell } from "../src/log";
+
+describe("theme toggle", () => {
+  it("resolves the preference to a concrete mode", () => {
+    expect(resolveMode("light", true)).toBe("light"); expect(resolveMode("dark", false)).toBe("dark");
+    expect(resolveMode("system", true)).toBe("dark"); expect(resolveMode("system", false)).toBe("light");
+  });
+  it("cycles Auto -> Light -> Dark -> Auto and labels each", () => {
+    expect(nextTheme("system")).toBe("light"); expect(nextTheme("light")).toBe("dark"); expect(nextTheme("dark")).toBe("system");
+    expect(["system", "light", "dark"].map((t) => themeLabel(t as any))).toEqual(["Auto", "Light", "Dark"]);
+    expect(THEME_COLOR.dark).not.toBe(THEME_COLOR.light);
+  });
+  // Regression guard for the original bug: letter styles only had light palettes, so they overrode the toggle.
+  const css = readFileSync("src/styles.css", "utf8");
+  it("every letter style defines both a light and a dark palette", () => {
+    for (const t of LETTER_THEMES.map((x) => x.id)) {
+      expect(css).toContain(`:root[data-mode="light"][data-letter="${t}"]`);
+      expect(css).toContain(`:root[data-mode="dark"][data-letter="${t}"]`);
+    }
+  });
+  it("no palette depends on the OS setting or the raw data-theme attribute", () => {
+    expect(css).not.toContain("prefers-color-scheme"); expect(css).not.toMatch(/:root\[data-theme/);
+  });
+  it("field mode override comes after the letter palettes", () => {
+    expect(css.indexOf(":root[data-field][data-mode]")).toBeGreaterThan(css.lastIndexOf('[data-letter="dove"]'));
+  });
+});
+
+describe("run log (field calibration)", () => {
+  const row = (o: Partial<Parameters<RunLog["add"]>[0]> = {}) => ({ t: 0, rms: 0.01, raw: 0.5, score: 0.5, margin: 0.2, smoothed: 0.4, hits: 1, level: "low", ms: 120, top: "a stream flowing", ...o });
+  it("writes a header and one escaped row per window", () => {
+    const l = new RunLog(); l.add(row({ top: 'rain, "heavy"' }));
+    const [h, r] = l.toCsv({ condition: "running water", place: "bridge, north side" }).split("\n");
+    expect(h.startsWith("time_iso,condition,place")).toBe(true); expect(r).toContain('"bridge, north side"'); expect(r).toContain('"rain, ""heavy"""');
+  });
+  it("is bounded and averages columns", () => {
+    const l = new RunLog(3); [0.2, 0.4, 0.6, 0.8].forEach((m) => l.add(row({ margin: m })));
+    expect(l.rows).toHaveLength(3); expect(l.mean("margin")).toBeCloseTo(0.6); expect(new RunLog().mean("raw")).toBe(0);
+  });
+  it("escapes only when needed", () => { expect(csvCell("plain")).toBe("plain"); expect(csvCell("a\nb")).toBe('"a\nb"'); });
+});

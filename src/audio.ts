@@ -26,7 +26,11 @@ export class AudioEngine {
   private len = 0;
   private timer?: number;
   private wake?: any;
-  private onVis = () => { if (!document.hidden) this.ctx?.resume(); };
+  /** Called if the microphone track ends (unplugged headset, OS revoked permission). */
+  onLost?: () => void;
+  // The OS drops the wake lock whenever the page is hidden, so take it again when the page returns.
+  private onVis = () => { if (!document.hidden) { this.ctx?.resume(); this.lock(); } };
+  private async lock() { if (this.wake && !this.wake.released) return; try { this.wake = await (navigator as any).wakeLock?.request("screen"); } catch {} }
   /** Resolves once the mic is live and the context is running. */
   ready: Promise<void> = Promise.resolve();
 
@@ -41,6 +45,9 @@ export class AudioEngine {
       });
       const ctx = this.ctx!;
       if (ctx.state !== "running") await ctx.resume();
+      // iOS can flip the context to "interrupted"/"suspended" (call, Siri, route change): resume when possible.
+      ctx.onstatechange = () => { if (ctx.state !== "running" && ctx.state !== "closed" && !document.hidden) ctx.resume().catch(() => {}); };
+      this.stream?.getAudioTracks()[0]?.addEventListener("ended", () => this.onLost?.());
       const maxLen = ctx.sampleRate * CONFIG.audio.windowSec;
       const src = ctx.createMediaStreamSource(this.stream);
       this.proc = ctx.createScriptProcessor(4096, 1, 1);
@@ -52,7 +59,7 @@ export class AudioEngine {
       const mute = ctx.createGain(); mute.gain.value = 0;
       src.connect(this.proc); this.proc.connect(mute); mute.connect(ctx.destination);
       document.addEventListener("visibilitychange", this.onVis);
-      try { this.wake = await (navigator as any).wakeLock?.request("screen"); } catch {}
+      await this.lock();
     })();
     this.ready.catch(() => {});
     return this.ready;
@@ -75,6 +82,7 @@ export class AudioEngine {
   }
 
   stop() {
+    this.onLost = undefined;
     clearInterval(this.timer);
     document.removeEventListener("visibilitychange", this.onVis);
     this.proc?.disconnect();

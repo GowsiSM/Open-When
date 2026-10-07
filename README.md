@@ -18,7 +18,7 @@ no audio upload, no server dependency, no per-call cost, and a model you can swa
 ```bash
 npm install
 npm run dev:https   # self-signed HTTPS so a phone on your Wi-Fi gets microphone access
-npm test            # 19 tests: cards, conditions, detector, state machine, recovery, matcher
+npm test            # 38 tests: cards, conditions, detector, state machine, theme toggle, run log, matcher
 npm run build       # static dist/ (deploy to Vercel/Netlify); set VITE_PUBLIC_URL for share links
 ```
 `predev`/`prebuild` copy the ONNX runtime wasm to `public/ort` so inference never needs a CDN.
@@ -35,6 +35,14 @@ byte progress, then works offline. Handles offline, no storage, unsupported brow
 download (retry keeps finished files), and corruption (Remove & retry). `src/models.ts` is the
 registry: condition mode -> required model. Only the model a condition needs is installed.
 SEE / FIND / Gemma-based condition parsing are listed as **planned** and are not implemented.
+
+## Theme (Auto / Light / Dark)
+The top-bar button cycles Auto -> Light -> Dark. `src/theme.ts` resolves the preference to a concrete
+mode and writes `<html data-mode>`; every palette in `styles.css` is keyed off `data-mode`, and each
+letter style has a light **and** a dark palette. An inline script in `index.html` sets the mode before
+first paint (no flash). Field mode (screen nearly blank outdoors) stays dark on purpose. A test fails
+if a letter style is added without both palettes. (The old bug: letter styles only defined light colours,
+so they overrode the toggle on every screen that had a letter.)
 
 ## Letter styles
 Three styles, chosen when creating a letter and stored in the link: **The old letter** (warm paper, wax seal), **Field letter** (notebook paper, "open outside", line sketches), **Dove / memory** (slate-blue, a line-art dove on the seal, a small marker while listening, and a brief pass when the letter opens). Styles change only CSS variables and ornaments; the state machine and detector are shared. Fonts are system stacks (works offline); the handwriting accent depends on the device's script fonts. Field mode forces a dark screen for every style.
@@ -54,9 +62,21 @@ real numbers from `?debug` on your phone. Weak spots expected: faint targets, wi
 breakdown vs rival sounds, margin, smoothed score, detector hits. "Score a sound file" separates
 capture problems from model problems. `?mock=1` swaps in a loudness matcher for UI testing.
 
+## Field calibration log
+In `?debug`, type where you are (e.g. "stream near bridge"), then **Copy log (CSV)** or **Download**.
+One row per scored window: rms, raw, score, margin, smoothed, hits, level, inference ms, top label.
+Use it to fill the results tables in `MODEL_FINE_TUNING.md`; it stays in memory and is never uploaded.
+
+## Audio robustness
+The wake lock is re-requested when the page becomes visible again (the OS drops it when hidden), the
+AudioContext is resumed after iOS-style interruptions, and a lost microphone track shows a clear message.
+None of this has been tested on a real phone yet.
+
 ## Limits
 - Locked screens can suspend mic capture in mobile browsers; a screen wake lock is requested, so keep the screen on in your pocket.
 - Haptics: Android only. iOS gets audio cues.
 - Only single "hear" conditions run; the condition model already types SEE/FIND/REACH/THEN (`src/condition.ts`) but rejects them.
 - Thresholds in `src/config.ts` are uncalibrated placeholders.
+- The CLAP model expects 48 kHz audio (`CONFIG.model.sampleRate`); do not "fix" this to 16 kHz.
+- Model download size is not measured; the UI shows the real size while installing.
 - Link payload lives in the URL hash (never sent to a server) but anyone with the link can read the message.

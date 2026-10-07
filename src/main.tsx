@@ -9,7 +9,9 @@ import { IMPROVEMENT, MODELS, ModelError, PRIVACY, modelState, classify, install
 import { Detector, Level } from "./detector";
 import { parseCondition } from "./condition";
 import { Ctx, Ev, INITIAL, Phase, inField, recover, reduce } from "./machine";
-import { Theme, getTheme, loadSession, saveLetter, saveSession, setTheme } from "./store";
+import { getTheme, loadSession, saveLetter, saveSession, saveTheme } from "./store";
+import { Theme, applyTheme, nextTheme, themeLabel, watchSystem } from "./theme";
+import { RunLog } from "./log";
 import "./styles.css";
 
 const LABEL: Record<Level, string> = { none: "Cold", low: "Warm", medium: "Close", high: "Strong signal", confirmed: "Confirmed" };
@@ -36,7 +38,8 @@ function App() {
   useEffect(() => { modelInstalled().then(setInstalled); }, [p, models]);
   const begin = () => { engine.current = new AudioEngine(); engine.current.prepare(); dispatch({ t: "BEGIN", now: Date.now() }); }; // inside the tap
   const home = () => { history.replaceState(null, "", location.pathname + location.search); dispatch({ t: "HOME" }); };
-  const cycle = () => { const n: Theme = theme === "system" ? "dark" : theme === "dark" ? "light" : "system"; setTheme(n); setT(n); };
+  const cycle = () => { const n = nextTheme(theme); saveTheme(n); setT(n); };
+  useEffect(() => { applyTheme(theme); return theme === "system" ? watchSystem(() => applyTheme("system")) : undefined; }, [theme]);
   const ai = modelState(installed, online);
   const lt = ctx.card ? themeOf(ctx.card) : p === "create" ? pick : null;
   useEffect(() => { const r = document.documentElement; lt ? (r.dataset.letter = lt) : delete r.dataset.letter; r.toggleAttribute("data-field", p === "searching"); }, [lt, p]);
@@ -45,7 +48,7 @@ function App() {
     <main className={`screen ${p === "searching" ? "field" : ""}`}>
       <header className="top field-hide">
         <span className="label">Open when</span>
-        <span><button className="link" onClick={() => setModels(true)}>Local AI</button> <button className="link" onClick={cycle} aria-label={`Theme: ${theme}. Change theme`}>{theme}</button></span>
+        <span><button className="link" onClick={() => setModels(true)}>Local AI</button> <button className="link themebtn" onClick={cycle} aria-label={`Theme: ${themeLabel(theme)}. Tap to change`} title="Theme: Auto → Light → Dark"><ThemeIcon theme={theme} />{themeLabel(theme)}</button></span>
       </header>
       {models && <Models online={online} onClose={() => setModels(false)} />}
       {!models && p === "home" && <Home ai={ai} onCreate={() => dispatch({ t: "CREATE" })} />}
@@ -60,6 +63,13 @@ function App() {
   );
 }
 
+const ThemeIcon = ({ theme }: { theme: Theme }) => (
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden>
+    {theme === "light" ? <><circle cx="8" cy="8" r="3" /><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1" /></>
+      : theme === "dark" ? <path d="M13 9.5A5.5 5.5 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5Z" />
+      : <><circle cx="8" cy="8" r="5.5" /><path d="M8 2.5v11a5.5 5.5 0 0 0 0-11Z" fill="currentColor" /></>}
+  </svg>
+);
 const Dove = ({ className = "" }: { className?: string }) => (
   <svg className={`dove ${className}`} viewBox="0 0 64 40" width="44" height="28" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <path d="M4 31C14 30 24 27 32 22C38 18 42 17 46 17C47 12 51 9 55 10L61 12L55 14C54 19 50 24 44 27C36 32 22 34 4 31Z" /><path d="M30 22C28 12 22 6 12 3C18 10 20 17 24 24" />
@@ -179,7 +189,7 @@ function Ready({ card, ctx, installed, online, onBegin, onLeave, onInstall }: { 
           <dt>Runs</dt><dd>On device{installed ? " · offline ready" : ""}</dd>
           <dt>Network</dt><dd>{installed ? "Not required" : "Needed once, to install"}</dd>
         </dl>
-        {installed === false && <p className={online ? "quiet" : "err"} role="status">{online ? "To listen for the world around you, Open When needs its environmental audio model (about 45 MB, installed once)." : "You're offline and the local AI model isn't installed yet. Connect once to install it."}</p>}
+        {installed === false && <p className={online ? "quiet" : "err"} role="status">{online ? "To listen for the world around you, Open When needs its environmental audio model, installed once. The size is shown while it downloads." : "You're offline and the local AI model isn't installed yet. Connect once to install it."}</p>}
         {ctx.startedAt && <p className="label">Session resumed · {mmss(ctx.listenMs)} listened</p>}
         <div className="row">
           {installed === false ? <button className="btn" onClick={onInstall}>Install model</button> : <button className="btn" disabled={installed === null} onClick={onBegin}>Begin</button>}
@@ -215,7 +225,7 @@ function Models({ online, onClose }: { online: boolean; onClose: () => void }) {
           <h2 className="mname">{m.name} <span className="dim">/ {m.tagline}</span></h2>
           <dl className="meta">
             <dt>Status</dt><dd>{!m.available ? "Not available yet" : installed === null ? "Checking…" : busy ? "Downloading" : installed ? "Installed" : "Not installed"}</dd>
-            <dt>Size</dt><dd>{m.estMB ? (installed && size ? mb(size) + " on device" : `~${m.estMB} MB estimate; actual shown while installing`) : "tbd"}</dd>
+            <dt>Size</dt><dd>{installed && size ? mb(size) + " on device" : m.available ? "Shown while installing (not measured yet)" : "tbd"}</dd>
             <dt>Runs</dt><dd>{m.available ? "On device" : "tbd"}</dd>
             <dt>Network</dt><dd>{m.available ? "Only for first install" : "n/a"}</dd>
             <dt>License</dt><dd>{m.license}</dd>
@@ -257,6 +267,8 @@ function Listen({ eng, card, phase, dispatch }: { eng: AudioEngine; card: Card; 
   const [debug, setDebug] = useState(() => new URLSearchParams(location.search).has("debug"));
   const [dbg, setDbg] = useState<Dbg | null>(null);
   const [fileRes, setFileRes] = useState<MatchResult | null>(null);
+  const [place, setPlace] = useState(""), [copied, setCopied] = useState("");
+  const logRef = useRef(new RunLog());
   const levelRef = useRef<Level>("none");
   const matcherRef = useRef<AudioMatcher | null>(null);
 
@@ -264,6 +276,7 @@ function Listen({ eng, card, phase, dispatch }: { eng: AudioEngine; card: Card; 
     let dead = false, busy = false, windows = 0, skipped = 0;
     const matcher = createMatcher(), det = new Detector({ ...CONFIG.detection, ...resolveCondition(conditionPhrase(card.condition)).detection });
     matcherRef.current = matcher;
+    eng.onLost = () => setStatus("Microphone disconnected. Tap Stop, then Begin again.");
     (async () => {
       try {
         // Mic permission + context were started in the Begin tap; model loads in parallel.
@@ -281,6 +294,7 @@ function Listen({ eng, card, phase, dispatch }: { eng: AudioEngine; card: Card; 
             else { res = await matcher.match(CONFIG.audio.normalize ? normalize(audio) : audio, card.condition); setStatus("Listening"); }
             const r = det.push(res.score, Date.now());
             levelRef.current = r.level; setLevel(r.level); if (r.level !== "confirmed") dispatch({ t: "SIGNAL", level: r.level });
+            logRef.current.add({ t: Date.now(), rms: level_, raw: res.raw, score: res.score, margin: res.margin, smoothed: r.smoothed, hits: r.hits, level: r.level, ms: res.ms, top: res.scores[0]?.label ?? "" });
             setDbg({ rms: level_, windows, skipped, res, margin: res.margin, smoothed: r.smoothed, hits: r.hits, level: r.level });
             if (r.level === "confirmed" && !dead) { dead = true; dispatch({ t: "CONFIRMED", now: Date.now() }); eng.chime(); setTimeout(() => dispatch({ t: "ACK" }), 1200); }
           } catch (e: any) { setStatus("Model error: " + (e?.message ?? e)); }
@@ -322,7 +336,7 @@ function Listen({ eng, card, phase, dispatch }: { eng: AudioEngine; card: Card; 
         {themeOf(card) === "dove" && <Dove className={`marker ${phase === "confirmed" ? "fly" : ""}`} />}
         <span className={`dot ${level}`} role="img" aria-label={LABEL[level]} />
         <p className="quiet">{phrase}</p>
-        <p className="label">{phase === "confirmed" ? "Confirmed" : status === "Listening" ? LABEL[level] : status}</p>
+        <p className="label" role="status" aria-live="polite">{phase === "confirmed" ? "Confirmed" : status === "Listening" ? LABEL[level] : status}</p>
       </div>
       {debug && (
         <pre className="debug">
@@ -339,6 +353,17 @@ WINDOWS  ${dbg?.windows ?? 0} (silent ${dbg?.skipped ?? 0})  ${dbg?.res.ms ?? 0}
         </pre>
       )}
       {debug && <label className="label">Score a sound file <input type="file" accept="audio/*" onChange={(e) => e.target.files?.[0] && scoreFile(e.target.files[0])} /></label>}
+      {debug && (
+        <div className="stack">
+          <input className="field mono" aria-label="Where are you? (saved in the log)" placeholder="Where are you? e.g. stream near bridge" value={place} onChange={(e) => setPlace(e.target.value)} />
+          <div className="row wrap">
+            <button className="btn ghost small" onClick={async () => { const csv = logRef.current.toCsv({ condition: phrase, place }); try { await navigator.clipboard.writeText(csv); setCopied(`Copied ${logRef.current.rows.length} rows`); } catch { setCopied("Copy blocked: use Download"); } }}>Copy log (CSV)</button>
+            <button className="btn ghost small" onClick={() => { const b = new Blob([logRef.current.toCsv({ condition: phrase, place })], { type: "text/csv" }), a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = `open-when-${Date.now()}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); }}>Download</button>
+            <button className="btn ghost small" onClick={() => { logRef.current.clear(); setCopied("Log cleared"); }}>Clear</button>
+          </div>
+          <p className="label" role="status">{copied || `${logRef.current.rows.length} windows logged · stays on this device`}</p>
+        </div>
+      )}
       <p className="quiet field-hide">Phone can stay in your pocket.</p>
       <div className="row between">
         <span className="mono dim">{t}</span>
@@ -391,5 +416,4 @@ function Summary({ ctx, onHome }: { ctx: Ctx; onHome: () => void }) {
 }
 
 if ("serviceWorker" in navigator && import.meta.env.PROD) navigator.serviceWorker.register(import.meta.env.BASE_URL + "sw.js").catch(() => {});
-setTheme(getTheme());
 createRoot(document.getElementById("root")!).render(<App />);

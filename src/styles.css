@@ -1,6 +1,8 @@
-:root { --display:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif; --body:"Iowan Old Style","Palatino Linotype",Georgia,serif; --ui:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --hand:"Segoe Script","Bradley Hand","Snell Roundhand","Noteworthy","Apple Chancery",cursive; --paper:#161614; --env:#1c1b19; --env2:#242320; --wax:#ece8df; --waxfg:#0a0a0a; --bg:#0a0a0a; --fg:#ece8df; --dim:#7a766f; --line:#2e2c29; --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif; --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace; color-scheme: dark; }
-:root[data-theme="light"] { --bg:#f1eee6; --fg:#0a0a0a; --dim:#6b675f; --line:#cfc9bc; color-scheme: light; }
-@media (prefers-color-scheme: light) { :root:not([data-theme]) { --bg:#f1eee6; --fg:#0a0a0a; --dim:#6b675f; --line:#cfc9bc; color-scheme: light; } }
+:root { --display:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif; --body:"Iowan Old Style","Palatino Linotype",Georgia,serif; --ui:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --hand:"Segoe Script","Bradley Hand","Snell Roundhand","Noteworthy","Apple Chancery",cursive; --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif; --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace; }
+/* Palettes are keyed by data-mode (set by src/theme.ts). Every letter style defines BOTH modes,
+   so the Light/Dark/Auto toggle always wins. Do not add a letter palette without both. */
+:root, :root[data-mode="dark"] { --bg:#0a0a0a; --fg:#ece8df; --dim:#7a766f; --line:#2e2c29; --paper:#161614; --env:#1c1b19; --env2:#242320; --wax:#ece8df; --waxfg:#0a0a0a; color-scheme:dark; }
+:root[data-mode="light"] { --bg:#f1eee6; --fg:#0a0a0a; --dim:#6b675f; --line:#cfc9bc; --paper:#faf8f2; --env:#e6e1d2; --env2:#d9d3c0; --wax:#0a0a0a; --waxfg:#f1eee6; color-scheme:light; }
 * { box-sizing: border-box; }
 html, body { margin:0; background:var(--bg); color:var(--fg); font-family:var(--body); transition: background .4s, color .4s; }
 .screen { min-height:100dvh; max-width:34rem; margin:0 auto; padding:calc(1.5rem + env(safe-area-inset-top)) 1.75rem calc(2rem + env(safe-area-inset-bottom)); display:flex; flex-direction:column; justify-content:space-between; gap:1.75rem; }
@@ -36,15 +38,22 @@ input[type="file"] { display:block; margin-top:.5rem; color:var(--fg); font:.75r
 .bar { height:6px; border:1px solid var(--fg); } .bar i { display:block; height:100%; background:var(--fg); transition:width .3s; }
 
 /* ---- letter themes: only paper, ink, type and ornaments change; never the logic ---- */
-:root[data-letter="old"] { --bg:#efe5cf; --fg:#2a1f16; --dim:#7b6b57; --line:#c8b894; --paper:#f6eedb; --env:#e3d3b0; --env2:#d6c49c; --wax:#7a2b22; --waxfg:#f1dcc8; color-scheme:light;
-  --grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 .45 0 0 0 0 .35 0 0 0 0 .2 0 0 0 .13 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
-:root[data-letter="field"] { --bg:#f2f0e8; --fg:#141414; --dim:#6a675e; --line:#cdc9bb; --paper:#faf9f4; --env:#e9e5d6; --env2:#ddd8c6; --wax:#141414; --waxfg:#f2f0e8; --accent:#4a5a3a; --body:"Charter","Iowan Old Style",Georgia,serif; color-scheme:light; }
-:root[data-letter="dove"] { --bg:#e8ebee; --fg:#1c2733; --dim:#66737f; --line:#b8c1ca; --paper:#f4f6f8; --env:#d5dce3; --env2:#c6cfd8; --wax:#2c3a49; --waxfg:#eef2f5; --display:Georgia,"Iowan Old Style",serif; color-scheme:light; }
-:root[data-field] { --bg:#0a0a0a; --fg:#ece8df; --dim:#7a766f; --line:#2e2c29; color-scheme:dark; }
+/* ---- letter styles: paper, ink, type and ornaments change; never the logic. Light + dark each. ---- */
+:root[data-letter="old"] { --grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 .45 0 0 0 0 .35 0 0 0 0 .2 0 0 0 .13 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+:root[data-mode="light"][data-letter="old"] { --bg:#efe5cf; --fg:#2a1f16; --dim:#7b6b57; --line:#c8b894; --paper:#f6eedb; --env:#e3d3b0; --env2:#d6c49c; --wax:#7a2b22; --waxfg:#f1dcc8; }
+:root[data-mode="dark"][data-letter="old"] { --bg:#1b1510; --fg:#ecdcc0; --dim:#a08f76; --line:#4a3b2a; --paper:#271e15; --env:#35291b; --env2:#42331f; --wax:#b4503f; --waxfg:#f6e6d2; }
+:root[data-mode="light"][data-letter="field"] { --bg:#f2f0e8; --fg:#141414; --dim:#6a675e; --line:#cdc9bb; --paper:#faf9f4; --env:#e9e5d6; --env2:#ddd8c6; --wax:#141414; --waxfg:#f2f0e8; --accent:#4a5a3a; --body:"Charter","Iowan Old Style",Georgia,serif; }
+:root[data-mode="dark"][data-letter="field"] { --bg:#11130f; --fg:#e9e6d8; --dim:#8c8c7c; --line:#34372c; --paper:#1a1c16; --env:#252820; --env2:#2e3228; --wax:#e9e6d8; --waxfg:#11130f; --accent:#9db386; --body:"Charter","Iowan Old Style",Georgia,serif; }
+:root[data-mode="light"][data-letter="dove"] { --bg:#e8ebee; --fg:#1c2733; --dim:#66737f; --line:#b8c1ca; --paper:#f4f6f8; --env:#d5dce3; --env2:#c6cfd8; --wax:#2c3a49; --waxfg:#eef2f5; --display:Georgia,"Iowan Old Style",serif; }
+:root[data-mode="dark"][data-letter="dove"] { --bg:#11161c; --fg:#dfe7ee; --dim:#8b99a7; --line:#2c3844; --paper:#19212a; --env:#212b36; --env2:#2a3643; --wax:#9fb3c6; --waxfg:#11161c; --display:Georgia,"Iowan Old Style",serif; }
+/* Field mode (screen nearly blank outdoors) is always dark, whatever the preference. Must stay after the letter blocks. */
+:root[data-field][data-mode] { --bg:#0a0a0a; --fg:#ece8df; --dim:#7a766f; --line:#2e2c29; color-scheme:dark; }
 .hand { font-family:var(--hand); font-size:1.05rem; color:var(--accent,var(--dim)); margin:0; }
 .sketch { color:var(--accent,var(--dim)); display:block; margin-bottom:.4rem; }
 .paper { background-color:var(--paper); background-image:var(--grain,none); box-shadow:inset 0 0 40px rgba(90,60,20,.12); }
-:root[data-letter="old"] .paper { box-shadow:inset 0 0 50px rgba(90,60,20,.22); }
+:root[data-mode="light"][data-letter="old"] .paper { box-shadow:inset 0 0 50px rgba(90,60,20,.22); }
+:root[data-mode="dark"] .paper { box-shadow:inset 0 0 40px rgba(0,0,0,.35); }
+.themebtn { display:inline-flex; align-items:center; gap:.4rem; } .themebtn svg { width:14px; height:14px; }
 .lhead { display:flex; flex-direction:column; gap:.5rem; align-items:flex-start; } .lhead .dove { color:var(--dim); }
 .themes { display:grid; gap:.5rem; } .chip.theme { text-align:left; display:flex; flex-direction:column; gap:.2rem; font-family:var(--ui); } .chip.theme span { color:var(--dim); font-size:.72rem; } .chip.theme.on { border-color:var(--fg); }
 .env { position:relative; width:min(72vw,16rem); aspect-ratio:3/2; margin:1rem auto; background:var(--env); border:1px solid var(--fg); perspective:700px; }

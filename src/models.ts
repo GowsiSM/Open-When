@@ -9,7 +9,7 @@ export interface ModelInfo {
 }
 export const MODELS: ModelInfo[] = [
   { id: "clap", name: "CLAP", tagline: "Environmental audio", mode: "hear", hfId: CONFIG.model.id,
-    sourceUrl: "https://huggingface.co/" + CONFIG.model.id, license: "Apache-2.0 (upstream laion/clap-htsat-unfused)", estMB: 45, recommended: true, available: true,
+    sourceUrl: "https://huggingface.co/" + CONFIG.model.id, license: "Apache-2.0 (upstream laion/clap-htsat-unfused)", estMB: null, recommended: true, available: true,
     why: "CLAP matches sounds to written descriptions, which is what turns “open when you hear running water” into a detection task. It runs on your device; audio is never uploaded. License: the upstream LAION model page lists Apache-2.0; the Xenova ONNX conversion Open When downloads has its own page, whose license field I could not read, so check it before redistributing." },
   { id: "vision", name: "Vision model", tagline: "SEE conditions (planned)", mode: "see", hfId: "", sourceUrl: "", license: "tbd", estMB: null, recommended: false, available: false,
     why: "For “open when you see a sunset”. Not shipped: no phone-reliable model chosen yet." },
