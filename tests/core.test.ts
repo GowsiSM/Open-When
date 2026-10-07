@@ -69,3 +69,17 @@ describe("audio + matcher", () => {
     expect((await m.match(loud, "birds")).scores[0].label).toBe("birds");
   });
 });
+
+import { MODELS, ModelError, classify, modelFor } from "../src/models";
+describe("model registry", () => {
+  it("maps hear to CLAP and keeps unshipped modes unavailable", () => {
+    expect(modelFor("hear")?.id).toBe("clap"); expect(modelFor("see")).toBeNull(); expect(modelFor("find")).toBeNull();
+    expect(MODELS.filter((m) => m.recommended)).toHaveLength(1);
+  });
+  it("classifies install failures", () => {
+    expect(classify({ name: "QuotaExceededError" }, true).kind).toBe("storage");
+    expect(classify(new Error("Failed to fetch"), false).kind).toBe("offline");
+    expect(classify(new Error("boom"), true).kind).toBe("failed");
+    expect(classify(new ModelError("unsupported", "x"), true).kind).toBe("unsupported");
+  });
+});

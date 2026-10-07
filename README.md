@@ -29,6 +29,13 @@ After one online visit: the app shell is cached by `public/sw.js`, the model by 
 ("Not installed", needs network once). Letters and the in-progress session persist in localStorage;
 a reload mid-walk returns to Ready with the session clock intact (a mic needs a fresh tap).
 
+## Installing the model (in-app)
+**Local AI** (top bar, or Install on the Ready screen) installs CLAP into the browser cache with real
+byte progress, then works offline. Handles offline, no storage, unsupported browser, interrupted
+download (retry keeps finished files), and corruption (Remove & retry). `src/models.ts` is the
+registry: condition mode -> required model. Only the model a condition needs is installed.
+SEE / FIND / Gemma-based condition parsing are listed as **planned** and are not implemented.
+
 ## Model
 `Xenova/clap-htsat-unfused` (ONNX conversion of LAION CLAP), loaded `q8`. License believed
 Apache-2.0; size, latency and accuracy are **not yet measured**: check the model card, then fill in

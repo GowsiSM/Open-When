@@ -37,3 +37,6 @@ html, body { margin:0; background:var(--bg); color:var(--fg); font-family:var(--
 .debug { font:.72rem/1.5 var(--mono); border:1px solid var(--line); padding:.8rem; margin:0; overflow-x:auto; white-space:pre; }
 input[type="file"] { display:block; margin-top:.5rem; color:var(--fg); font:.75rem var(--mono); }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration:.01ms !important; animation-delay:0s !important; transition-duration:.01ms !important; } .dot { animation:none; } }
+.model { border:1px solid var(--line); padding:1.2rem; display:flex; flex-direction:column; gap:.9rem; } .model.planned { opacity:.55; }
+.mname { font:400 1.35rem var(--serif); margin:0; } .row.wrap { flex-wrap:wrap; } a.link { text-decoration:underline; display:inline-flex; align-items:center; }
+.bar { height:6px; border:1px solid var(--fg); } .bar i { display:block; height:100%; background:var(--fg); transition:width .3s; }

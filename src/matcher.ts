@@ -11,28 +11,48 @@ export interface AudioMatcher {
   match(audio: Float32Array, condition: string): Promise<MatchResult>;
 }
 
+export interface Progress { loaded: number; total: number; pct: number }
+let clapP: Promise<any> | null = null;
+const subs = new Set<(p: Progress) => void>();
+export const resetClap = () => { clapP = null; };
+
+// One shared pipeline: installing the model and listening use the same instance.
+export function loadClap(onP?: (p: Progress) => void): Promise<any> {
+  if (onP) subs.add(onP);
+  clapP ??= (async () => {
+    const { pipeline, env } = await import("@huggingface/transformers");
+    env.allowLocalModels = false;
+    (env.backends.onnx as any).wasm.wasmPaths = import.meta.env.DEV
+      ? "/node_modules/onnxruntime-web/dist/"
+      : import.meta.env.BASE_URL + "ort/"; // Vite must transform the .mjs in dev; production uses copied local assets.
+    const files: Record<string, [number, number]> = {};
+    return (pipeline as any)("zero-shot-audio-classification", CONFIG.model.id, {
+      dtype: CONFIG.model.dtype,
+      progress_callback: (e: any) => {
+        if (e?.status !== "progress" || !e.total) return;
+        files[e.file] = [e.loaded, e.total];
+        const loaded = Object.values(files).reduce((a, f) => a + f[0], 0), total = Object.values(files).reduce((a, f) => a + f[1], 0);
+        subs.forEach((f) => f({ loaded, total, pct: Math.round((loaded / total) * 100) }));
+      },
+    });
+  })().catch((e) => { clapP = null; throw e; }).finally(() => subs.clear());
+  return clapP;
+}
+
 // Local open-weight CLAP via Transformers.js. Audio never leaves the device.
 export class ClapMatcher implements AudioMatcher {
   private clf: any;
-  async load(onProgress?: (pct: number) => void) {
-    const { pipeline, env } = await import("@huggingface/transformers");
-    env.allowLocalModels = false;
-    // ONNX wasm is served from our own origin (copied to public/ort) so inference works offline.
-    (env.backends.onnx as any).wasm.wasmPaths = import.meta.env.BASE_URL + "ort/";
-    this.clf = await (pipeline as any)("zero-shot-audio-classification", CONFIG.model.id, {
-      dtype: CONFIG.model.dtype,
-      progress_callback: (p: any) => p?.progress != null && onProgress?.(Math.round(p.progress)),
-    });
-  }
+  async load(onProgress?: (pct: number) => void) { this.clf = await loadClap(onProgress && ((p) => onProgress(p.pct))); }
   async match(audio: Float32Array, condition: string): Promise<MatchResult> {
     const t0 = performance.now();
     const phrase = conditionPhrase(condition);
-    const rivals = CONFIG.negatives.filter((n) => !phrase.includes(n) && !n.includes(phrase) && !(phrase.includes("bird") && n.includes("bird")));
-    const out = (await this.clf(audio, [phrase, ...rivals], { hypothesis_template: CONFIG.model.template })) as LabelScore[];
+    const out = (await this.clf(audio, [phrase, ...rivalsFor(phrase)], { hypothesis_template: CONFIG.model.template })) as LabelScore[];
     const scores = [...out].sort((a, b) => b.score - a.score);
     return { score: out.find((o) => o.label === phrase)?.score ?? 0, scores, ms: Math.round(performance.now() - t0) };
   }
 }
+export const rivalsFor = (phrase: string) =>
+  CONFIG.negatives.filter((n) => !phrase.includes(n) && !n.includes(phrase) && !(phrase.includes("bird") && n.includes("bird")));
 
 // Dev fallback (?mock=1): loudness as a stand-in score, to exercise the UI without a model.
 export class MockMatcher implements AudioMatcher {

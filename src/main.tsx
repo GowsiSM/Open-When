@@ -3,7 +3,8 @@ import { createRoot } from "react-dom/client";
 import { CONFIG } from "./config";
 import { Card, cardFromHash, cardUrl, conditionPhrase, isLocalBase, makeCard } from "./card";
 import { AudioEngine, resample, rms } from "./audio";
-import { AudioMatcher, MatchResult, createMatcher, modelInstalled } from "./matcher";
+import { AudioMatcher, MatchResult, Progress, createMatcher, modelInstalled, rivalsFor } from "./matcher";
+import { MODELS, ModelError, classify, installModel, installedBytes, modelFor, removeModel } from "./models";
 import { Detector, Level } from "./detector";
 import { parseCondition } from "./condition";
 import { Ctx, Ev, INITIAL, Phase, inField, recover, reduce } from "./machine";
@@ -27,24 +28,26 @@ function App() {
   const online = useOnline();
   const [installed, setInstalled] = useState<boolean | null>(null);
   const [theme, setT] = useState<Theme>(getTheme());
+  const [models, setModels] = useState(false);
   const p = ctx.phase;
   useEffect(() => { saveSession(ctx); }, [ctx]);
-  useEffect(() => { modelInstalled().then(setInstalled); }, [p]);
+  useEffect(() => { modelInstalled().then(setInstalled); }, [p, models]);
   const begin = () => { engine.current = new AudioEngine(); engine.current.prepare(); dispatch({ t: "BEGIN", now: Date.now() }); }; // inside the tap
   const home = () => { history.replaceState(null, "", location.pathname + location.search); dispatch({ t: "HOME" }); };
   const cycle = () => { const n: Theme = theme === "system" ? "dark" : theme === "dark" ? "light" : "system"; setTheme(n); setT(n); };
-  const ai = installed ? (online ? "Local AI ready" : "Offline · local model ready") : online ? "Model installs on first use" : "Offline · model not installed";
+  const ai = `${online ? "Online" : "Offline"} · ${installed ? "model ready" : "model not installed"}`;
 
   return (
     <main className={`screen ${p === "searching" ? "field" : ""}`}>
       <header className="top field-hide">
         <span className="label">Open when</span>
-        <button className="link" onClick={cycle} aria-label={`Theme: ${theme}. Change theme`}>{theme}</button>
+        <span><button className="link" onClick={() => setModels(true)}>Local AI</button> <button className="link" onClick={cycle} aria-label={`Theme: ${theme}. Change theme`}>{theme}</button></span>
       </header>
-      {p === "home" && <Home ai={ai} onCreate={() => dispatch({ t: "CREATE" })} />}
-      {p === "create" && <Create onBack={home} onSeal={(card) => dispatch({ t: "SEALED", card })} />}
-      {p === "seal" && ctx.card && <Seal card={ctx.card} onContinue={() => dispatch({ t: "ACK" })} />}
-      {p === "ready" && ctx.card && <Ready card={ctx.card} ctx={ctx} installed={installed} online={online} onBegin={begin} onLeave={home} />}
+      {models && <Models online={online} onClose={() => setModels(false)} />}
+      {!models && p === "home" && <Home ai={ai} onCreate={() => dispatch({ t: "CREATE" })} />}
+      {!models && p === "create" && <Create onBack={home} onSeal={(card) => dispatch({ t: "SEALED", card })} />}
+      {!models && p === "seal" && ctx.card && <Seal card={ctx.card} onContinue={() => dispatch({ t: "ACK" })} />}
+      {!models && p === "ready" && ctx.card && <Ready card={ctx.card} ctx={ctx} installed={installed} online={online} onBegin={begin} onLeave={home} onInstall={() => setModels(true)} />}
       {(inField(p) || p === "confirmed") && ctx.card && engine.current && <Listen eng={engine.current} card={ctx.card} phase={p} dispatch={dispatch} />}
       {p === "unlock" && <Unlock onOpen={() => dispatch({ t: "OPEN" })} />}
       {p === "message" && ctx.card && <Message card={ctx.card} onDone={() => dispatch({ t: "FINISH" })} />}
@@ -119,23 +122,76 @@ function Seal({ card, onContinue }: { card: Card; onContinue: () => void }) {
   );
 }
 
-function Ready({ card, ctx, installed, online, onBegin, onLeave }: { card: Card; ctx: Ctx; installed: boolean | null; online: boolean; onBegin: () => void; onLeave: () => void }) {
-  const blocked = installed === false && !online;
+function Ready({ card, ctx, installed, online, onBegin, onLeave, onInstall }: { card: Card; ctx: Ctx; installed: boolean | null; online: boolean; onBegin: () => void; onLeave: () => void; onInstall: () => void }) {
+  const m = modelFor("hear")!;
   return (
     <>
       <h1 className="big">you hear<br />{conditionPhrase(card.condition)}.</h1>
       <div className="stack">
-        <p className="quiet">Your message is sealed. Go outside. When you're ready:</p>
+        <p className="quiet">Your message is sealed. Go outside.</p>
         <dl className="meta">
-          <dt>AI model</dt><dd>{installed === null ? "Checking…" : installed ? "Local, installed" : "Not installed"}</dd>
-          <dt>Microphone</dt><dd>Asked when you begin</dd>
-          <dt>Network</dt><dd>{installed ? "Not required" : "Needed once, to install the model"}</dd>
+          <dt>Local AI</dt><dd>{installed === null ? "Checking…" : installed ? "Ready" : "Not installed"}</dd>
+          <dt>Model</dt><dd>{m.name} / {m.tagline}</dd>
+          <dt>Runs</dt><dd>On device{installed ? " · offline ready" : ""}</dd>
+          <dt>Network</dt><dd>{installed ? "Not required" : "Needed once, to install"}</dd>
         </dl>
-        {blocked && <p className="err" role="alert">The listening model isn't installed and you're offline. Connect once to install it; after that this works with no signal.</p>}
+        {installed === false && <p className={online ? "quiet" : "err"} role="status">{online ? "To listen for the world around you, Open When needs its environmental audio model (about 45 MB, installed once)." : "You're offline and the local AI model isn't installed yet. Connect once to install it."}</p>}
         {ctx.startedAt && <p className="label">Session resumed · {mmss(ctx.listenMs)} listened</p>}
-        <div className="row"><button className="btn" disabled={blocked} onClick={onBegin}>Begin</button><button className="btn ghost" onClick={onLeave}>Leave</button></div>
+        <div className="row">
+          {installed === false ? <button className="btn" onClick={onInstall}>Install model</button> : <button className="btn" disabled={installed === null} onClick={onBegin}>Begin</button>}
+          <button className="btn ghost" onClick={onLeave}>Leave</button>
+        </div>
       </div>
     </>
+  );
+}
+
+const mb = (b: number) => (b / 1048576).toFixed(b < 1e7 ? 1 : 0) + " MB";
+const ERR_HELP: Record<string, string> = { offline: "Connect and retry. Files already downloaded are kept.", storage: "Free some space on this device, then retry.", unsupported: "Try a current Chrome, Edge, Safari or Firefox over HTTPS.", failed: "If it keeps failing, remove the model and install again." };
+
+function Models({ online, onClose }: { online: boolean; onClose: () => void }) {
+  const [installed, setInstalled] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false), [prog, setProg] = useState<Progress | null>(null), [err, setErr] = useState<ModelError | null>(null), [why, setWhy] = useState<string | null>(null);
+  const refresh = () => modelInstalled().then(setInstalled);
+  useEffect(() => { refresh(); }, []);
+  const install = async () => {
+    setErr(null); setBusy(true); setProg(null);
+    try { await installModel(setProg); await refresh(); } catch (e) { setErr(classify(e, navigator.onLine)); } finally { setBusy(false); }
+  };
+  const remove = async () => { await removeModel(); setErr(null); refresh(); };
+  const size = installedBytes();
+  return (
+    <section className="stack models" aria-label="Local AI">
+      <p className="label">Your field AI</p>
+      <h1 className="big small">{installed ? "Your phone can listen now." : "Teach your phone to listen."}</h1>
+      <p className="quiet">{installed ? "No cloud. No upload. Just the world around you." : "Install once. Use offline. The model lives on this device and your microphone audio never leaves it."}</p>
+      {MODELS.map((m) => (
+        <article key={m.id} className={`model ${m.available ? "" : "planned"}`}>
+          <p className="label">{m.recommended ? "Recommended for Open When" : m.available ? "Optional" : "Planned"}</p>
+          <h2 className="mname">{m.name} <span className="dim">/ {m.tagline}</span></h2>
+          <dl className="meta">
+            <dt>Status</dt><dd>{!m.available ? "Not available yet" : installed === null ? "Checking…" : busy ? "Downloading" : installed ? "Installed" : "Not installed"}</dd>
+            <dt>Size</dt><dd>{m.estMB ? (installed && size ? mb(size) + " on device" : `~${m.estMB} MB estimate; actual shown while installing`) : "tbd"}</dd>
+            <dt>Runs</dt><dd>{m.available ? "On device" : "tbd"}</dd>
+            <dt>Network</dt><dd>{m.available ? "Only for first install" : "n/a"}</dd>
+            <dt>License</dt><dd>{m.license}</dd>
+          </dl>
+          {m.available && busy && <div role="progressbar" aria-valuenow={prog?.pct ?? 0} aria-valuemin={0} aria-valuemax={100}><div className="bar"><i style={{ width: `${prog?.pct ?? 0}%` }} /></div><p className="label">{prog ? `${prog.pct}% · ${mb(prog.loaded)} / ${mb(prog.total)}` : "Starting…"} · keep this screen open</p></div>}
+          {m.available && installed === false && !busy && !online && <p className="err">You're offline and the local AI model isn't installed yet. Connect once to install it.</p>}
+          {m.available && err && <p className="err" role="alert">{err.message} {ERR_HELP[err.kind]}</p>}
+          <div className="row wrap">
+            {m.available && installed === false && <button className="btn" disabled={busy} onClick={install}>{err ? "Retry install" : "Install model"}</button>}
+            {m.available && installed && <button className="btn ghost small" onClick={remove}>Remove from device</button>}
+            {m.available && err?.kind === "failed" && <button className="btn ghost small" onClick={remove}>Remove &amp; retry</button>}
+            <button className="link" onClick={() => setWhy(why === m.id ? null : m.id)}>Why this model?</button>
+            {m.sourceUrl && <a className="link" href={m.sourceUrl} target="_blank" rel="noreferrer">View model source</a>}
+          </div>
+          {why === m.id && <p className="quiet">{m.why}</p>}
+        </article>
+      ))}
+      {installed && !busy && <p className="quiet rise">Local AI ready. Internet is no longer required for audio detection.</p>}
+      <button className="btn" onClick={onClose}>{installed ? "Continue" : "Back"}</button>
+    </section>
   );
 }
 
@@ -220,11 +276,13 @@ function Listen({ eng, card, phase, dispatch }: { eng: AudioEngine; card: Card; 
         <pre className="debug">
 {`MIC      ${eng.info().state}  ${eng.info().rate}Hz (track ${eng.info().track || "?"})
 LEVEL    ${dbg ? dbg.rms.toFixed(4) : "-"} rms  ${dbg && dbg.rms < CONFIG.audio.silenceRms ? "SILENT" : ""}
+MODEL    ${CONFIG.model.id} loaded
+TARGET   ${phrase}  rivals ${rivalsFor(phrase).length}
 WINDOWS  ${dbg?.windows ?? 0} (silent ${dbg?.skipped ?? 0})  ${dbg?.res.ms ?? 0}ms/inference
 `}
 {(dbg?.res.scores ?? []).slice(0, 5).map((x) => `${x.label.padEnd(16).slice(0, 16)} ${x.score.toFixed(2)} ${bar(x.score)}${x.label === phrase ? " <" : ""}\n`).join("")}
 {dbg ? `MARGIN   ${dbg.margin >= 0 ? "+" : ""}${dbg.margin.toFixed(2)}\nSMOOTHED ${bar(dbg.smoothed)} ${dbg.smoothed.toFixed(2)}\nHITS     ${dbg.hits}/${CONFIG.detection.hitsRequired} needed   ${dbg.level.toUpperCase()}` : "waiting for first window…"}
-{fileRes ? `\nFILE     ${fileRes.scores.slice(0, 3).map((x) => `${x.label} ${x.score.toFixed(2)}`).join(" | ")}` : ""}
+{fileRes ? `\nVERDICT  ${fileRes.score >= CONFIG.detection.high ? "model recognises this file: if live mic scores low, suspect capture" : "model does NOT score this file high: model/labels/thresholds, not the mic"}\nFILE     ${fileRes.scores.slice(0, 3).map((x) => `${x.label} ${x.score.toFixed(2)}`).join(" | ")}` : ""}
         </pre>
       )}
       {debug && <label className="label">Score a sound file <input type="file" accept="audio/*" onChange={(e) => e.target.files?.[0] && scoreFile(e.target.files[0])} /></label>}
