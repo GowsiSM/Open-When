@@ -1,10 +1,11 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { CONFIG } from "./config";
-import { Card, cardFromHash, cardUrl, conditionPhrase, isLocalBase, makeCard } from "./card";
-import { AudioEngine, resample, rms } from "./audio";
-import { AudioMatcher, MatchResult, Progress, createMatcher, modelInstalled, rivalsFor } from "./matcher";
-import { MODELS, ModelError, classify, installModel, installedBytes, modelFor, removeModel } from "./models";
+import { Card, LETTER_THEMES, LetterTheme, cardFromHash, cardUrl, conditionPhrase, isLocalBase, makeCard, themeOf } from "./card";
+import { resolveCondition } from "./conditionConfig";
+import { AudioEngine, normalize, resample, rms, sfx } from "./audio";
+import { AudioMatcher, MatchResult, Progress, createMatcher, modelInstalled } from "./matcher";
+import { IMPROVEMENT, MODELS, ModelError, PRIVACY, modelState, classify, installModel, installedBytes, modelFor, removeModel } from "./models";
 import { Detector, Level } from "./detector";
 import { parseCondition } from "./condition";
 import { Ctx, Ev, INITIAL, Phase, inField, recover, reduce } from "./machine";
@@ -29,13 +30,16 @@ function App() {
   const [installed, setInstalled] = useState<boolean | null>(null);
   const [theme, setT] = useState<Theme>(getTheme());
   const [models, setModels] = useState(false);
+  const [pick, setPick] = useState<LetterTheme>("field");
   const p = ctx.phase;
   useEffect(() => { saveSession(ctx); }, [ctx]);
   useEffect(() => { modelInstalled().then(setInstalled); }, [p, models]);
   const begin = () => { engine.current = new AudioEngine(); engine.current.prepare(); dispatch({ t: "BEGIN", now: Date.now() }); }; // inside the tap
   const home = () => { history.replaceState(null, "", location.pathname + location.search); dispatch({ t: "HOME" }); };
   const cycle = () => { const n: Theme = theme === "system" ? "dark" : theme === "dark" ? "light" : "system"; setTheme(n); setT(n); };
-  const ai = `${online ? "Online" : "Offline"} · ${installed ? "model ready" : "model not installed"}`;
+  const ai = modelState(installed, online);
+  const lt = ctx.card ? themeOf(ctx.card) : p === "create" ? pick : null;
+  useEffect(() => { const r = document.documentElement; lt ? (r.dataset.letter = lt) : delete r.dataset.letter; r.toggleAttribute("data-field", p === "searching"); }, [lt, p]);
 
   return (
     <main className={`screen ${p === "searching" ? "field" : ""}`}>
@@ -45,14 +49,50 @@ function App() {
       </header>
       {models && <Models online={online} onClose={() => setModels(false)} />}
       {!models && p === "home" && <Home ai={ai} onCreate={() => dispatch({ t: "CREATE" })} />}
-      {!models && p === "create" && <Create onBack={home} onSeal={(card) => dispatch({ t: "SEALED", card })} />}
+      {!models && p === "create" && <Create theme={pick} onTheme={setPick} onBack={home} onSeal={(card) => dispatch({ t: "SEALED", card })} />}
       {!models && p === "seal" && ctx.card && <Seal card={ctx.card} onContinue={() => dispatch({ t: "ACK" })} />}
       {!models && p === "ready" && ctx.card && <Ready card={ctx.card} ctx={ctx} installed={installed} online={online} onBegin={begin} onLeave={home} onInstall={() => setModels(true)} />}
       {(inField(p) || p === "confirmed") && ctx.card && engine.current && <Listen eng={engine.current} card={ctx.card} phase={p} dispatch={dispatch} />}
-      {p === "unlock" && <Unlock onOpen={() => dispatch({ t: "OPEN" })} />}
+      {p === "unlock" && ctx.card && <Unlock card={ctx.card} onOpen={() => dispatch({ t: "OPEN" })} />}
       {p === "message" && ctx.card && <Message card={ctx.card} onDone={() => dispatch({ t: "FINISH" })} />}
       {p === "summary" && ctx.card && <Summary ctx={ctx} onHome={home} />}
     </main>
+  );
+}
+
+const Dove = ({ className = "" }: { className?: string }) => (
+  <svg className={`dove ${className}`} viewBox="0 0 64 40" width="44" height="28" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M4 31C14 30 24 27 32 22C38 18 42 17 46 17C47 12 51 9 55 10L61 12L55 14C54 19 50 24 44 27C36 32 22 34 4 31Z" /><path d="M30 22C28 12 22 6 12 3C18 10 20 17 24 24" />
+  </svg>
+);
+function Sketch({ card }: { card: Card }) {
+  if (themeOf(card) !== "field") return null;
+  const id = resolveCondition(conditionPhrase(card.condition)).id;
+  return (
+    <svg className="sketch" viewBox="0 0 80 28" width="96" height="34" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" aria-hidden>
+      {id === "running-water" ? <path d="M2 7q8-6 16 0t16 0 16 0 16 0M2 15q8-6 16 0t16 0 16 0 16 0M2 23q8-6 16 0t16 0 16 0 16 0" />
+        : id === "rain" ? <path d="M12 4l-3 8M26 8l-3 8M40 3l-3 8M54 8l-3 8M68 4l-3 8M20 18l-3 8M46 18l-3 8M62 19l-3 8" />
+        : <path d="M10 22C20 6 44 4 70 6C64 22 36 26 10 22ZM10 22L58 10" />}
+    </svg>
+  );
+}
+function Envelope({ cls = "", theme }: { cls?: string; theme: LetterTheme }) {
+  return (
+    <div className={`env ${cls}`} aria-hidden>
+      <i className="sheet" /><i className="pocket"><b className="addr">{theme === "old" ? "for you" : theme === "field" ? "open outside" : ""}</b></i><i className="flap" />
+      <i className="wax">{theme === "dove" && <Dove />}</i>
+    </div>
+  );
+}
+function Letterhead({ card }: { card: Card }) {
+  const th = themeOf(card), date = new Date().toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
+  return (
+    <header className="lhead">
+      {th === "dove" && <Dove />}
+      <span className="hand">{th === "field" ? `opened outside · ${date}` : th === "old" ? date : ""}</span>
+      {th === "field" && <Sketch card={card} />}
+      <span className="label">Open when / found</span>
+    </header>
   );
 }
 
@@ -72,12 +112,12 @@ function Home({ ai, onCreate }: { ai: string; onCreate: () => void }) {
   );
 }
 
-function Create({ onBack, onSeal }: { onBack: () => void; onSeal: (c: Card) => void }) {
+function Create({ theme, onTheme, onBack, onSeal }: { theme: LetterTheme; onTheme: (t: LetterTheme) => void; onBack: () => void; onSeal: (c: Card) => void }) {
   const [condition, setCondition] = useState(""), [message, setMessage] = useState(""), [from, setFrom] = useState(""), [err, setErr] = useState("");
   const seal = () => {
     const r = parseCondition(condition);
     if (!r.ok) return setErr(r.reason);
-    try { onSeal(makeCard({ condition, message, from })); } catch (e: any) { setErr(e.message); }
+    try { const c = makeCard({ condition, message, from, theme }); sfx("seal"); onSeal(c); } catch (e: any) { setErr(e.message); }
   };
   return (
     <div className="create">
@@ -88,6 +128,10 @@ function Create({ onBack, onSeal }: { onBack: () => void; onSeal: (c: Card) => v
         <p className="label">Your message (only you write it)</p>
         <textarea className="field" aria-label="Message" rows={6} placeholder="You made it. I knew you would." value={message} onChange={(e) => setMessage(e.target.value)} />
         <input className="field" aria-label="Your name" placeholder="Your name (optional)" value={from} onChange={(e) => setFrom(e.target.value)} />
+        <p className="label">Letter style</p>
+        <div className="themes" role="radiogroup" aria-label="Letter style">
+          {LETTER_THEMES.map((t) => <button key={t.id} role="radio" aria-checked={theme === t.id} className={`chip theme ${theme === t.id ? "on" : ""}`} onClick={() => onTheme(t.id)}><b>{t.name}</b><span>{t.blurb}</span></button>)}
+        </div>
         {err && <p className="err" role="alert">{err}</p>}
         <div className="row"><button className="btn" onClick={seal}>Seal letter</button><button className="btn ghost" onClick={onBack}>Back</button></div>
       </section>
@@ -103,12 +147,12 @@ function Create({ onBack, onSeal }: { onBack: () => void; onSeal: (c: Card) => v
 function Seal({ card, onContinue }: { card: Card; onContinue: () => void }) {
   const [done, setDone] = useState(false), [copied, setCopied] = useState(false);
   const [base, setBase] = useState(() => { try { return localStorage.getItem("ow:base") || (import.meta.env.VITE_PUBLIC_URL as string) || location.origin + location.pathname; } catch { return location.origin + location.pathname; } });
-  useEffect(() => { const t = setTimeout(() => { setDone(true); navigator.vibrate?.(40); }, 1800); return () => clearTimeout(t); }, []);
+  useEffect(() => { const t = setTimeout(() => { setDone(true); navigator.vibrate?.(40); }, 2500); return () => clearTimeout(t); }, []);
   const editBase = (v: string) => { setBase(v); try { localStorage.setItem("ow:base", v); } catch {} };
   const url = cardUrl(card, base);
   return (
     <>
-      <div className="env sealing" aria-hidden><i className="flap" /><i className="wax" /></div>
+      <Envelope cls="sealing" theme={themeOf(card)} />
       <p className="label" role="status">{done ? "Sealed" : "Sealing…"}</p>
       {done && (
         <div className="stack rise">
@@ -126,7 +170,7 @@ function Ready({ card, ctx, installed, online, onBegin, onLeave, onInstall }: { 
   const m = modelFor("hear")!;
   return (
     <>
-      <h1 className="big">you hear<br />{conditionPhrase(card.condition)}.</h1>
+      <div><Sketch card={card} /><p className="hand">open when</p><h1 className="big">you hear<br />{conditionPhrase(card.condition)}.</h1></div>
       <div className="stack">
         <p className="quiet">Your message is sealed. Go outside.</p>
         <dl className="meta">
@@ -189,6 +233,14 @@ function Models({ online, onClose }: { online: boolean; onClose: () => void }) {
           {why === m.id && <p className="quiet">{m.why}</p>}
         </article>
       ))}
+      <article className="model">
+        <p className="label">Improvement path (experimental)</p>
+        <dl className="meta">{IMPROVEMENT.map((i) => <><dt key={i.name}>{i.status}</dt><dd>{i.name}. {i.note}</dd></>)}</dl>
+      </article>
+      <article className="model">
+        <p className="label">Privacy</p>
+        {PRIVACY.map((x) => <p key={x} className="quiet">{x}</p>)}
+      </article>
       {installed && !busy && <p className="quiet rise">Local AI ready. Internet is no longer required for audio detection.</p>}
       <button className="btn" onClick={onClose}>{installed ? "Continue" : "Back"}</button>
     </section>
@@ -210,7 +262,7 @@ function Listen({ eng, card, phase, dispatch }: { eng: AudioEngine; card: Card; 
 
   useEffect(() => {
     let dead = false, busy = false, windows = 0, skipped = 0;
-    const matcher = createMatcher(), det = new Detector();
+    const matcher = createMatcher(), det = new Detector({ ...CONFIG.detection, ...resolveCondition(conditionPhrase(card.condition)).detection });
     matcherRef.current = matcher;
     (async () => {
       try {
@@ -224,13 +276,12 @@ function Listen({ eng, card, phase, dispatch }: { eng: AudioEngine; card: Card; 
           try {
             windows++;
             const level_ = rms(audio);
-            let res: MatchResult = { score: 0, scores: [], ms: 0 };
+            let res: MatchResult = { score: 0, raw: 0, margin: 0, cfgId: "none", scores: [], ms: 0 };
             if (level_ < CONFIG.audio.silenceRms) { skipped++; setStatus("Mic is silent. Check the browser's mic permission."); }
-            else { res = await matcher.match(audio, card.condition); setStatus("Listening"); }
+            else { res = await matcher.match(CONFIG.audio.normalize ? normalize(audio) : audio, card.condition); setStatus("Listening"); }
             const r = det.push(res.score, Date.now());
-            const rival = res.scores.find((x) => x.label !== conditionPhrase(card.condition))?.score ?? 0;
             levelRef.current = r.level; setLevel(r.level); if (r.level !== "confirmed") dispatch({ t: "SIGNAL", level: r.level });
-            setDbg({ rms: level_, windows, skipped, res, margin: res.score - rival, smoothed: r.smoothed, hits: r.hits, level: r.level });
+            setDbg({ rms: level_, windows, skipped, res, margin: res.margin, smoothed: r.smoothed, hits: r.hits, level: r.level });
             if (r.level === "confirmed" && !dead) { dead = true; dispatch({ t: "CONFIRMED", now: Date.now() }); eng.chime(); setTimeout(() => dispatch({ t: "ACK" }), 1200); }
           } catch (e: any) { setStatus("Model error: " + (e?.message ?? e)); }
           finally { busy = false; }
@@ -268,6 +319,7 @@ function Listen({ eng, card, phase, dispatch }: { eng: AudioEngine; card: Card; 
   return (
     <>
       <div className="listen">
+        {themeOf(card) === "dove" && <Dove className={`marker ${phase === "confirmed" ? "fly" : ""}`} />}
         <span className={`dot ${level}`} role="img" aria-label={LABEL[level]} />
         <p className="quiet">{phrase}</p>
         <p className="label">{phase === "confirmed" ? "Confirmed" : status === "Listening" ? LABEL[level] : status}</p>
@@ -277,10 +329,11 @@ function Listen({ eng, card, phase, dispatch }: { eng: AudioEngine; card: Card; 
 {`MIC      ${eng.info().state}  ${eng.info().rate}Hz (track ${eng.info().track || "?"})
 LEVEL    ${dbg ? dbg.rms.toFixed(4) : "-"} rms  ${dbg && dbg.rms < CONFIG.audio.silenceRms ? "SILENT" : ""}
 MODEL    ${CONFIG.model.id} loaded
-TARGET   ${phrase}  rivals ${rivalsFor(phrase).length}
+TARGET   ${phrase} [${resolveCondition(phrase).id}] ${resolveCondition(phrase).prompts.length} prompts / ${resolveCondition(phrase).rivals.length} rivals
+NORMALIZE ${CONFIG.audio.normalize ? "on" : "off"}   RAW ${dbg ? dbg.res.raw.toFixed(2) : "-"} (summed prompts)
 WINDOWS  ${dbg?.windows ?? 0} (silent ${dbg?.skipped ?? 0})  ${dbg?.res.ms ?? 0}ms/inference
 `}
-{(dbg?.res.scores ?? []).slice(0, 5).map((x) => `${x.label.padEnd(16).slice(0, 16)} ${x.score.toFixed(2)} ${bar(x.score)}${x.label === phrase ? " <" : ""}\n`).join("")}
+{(dbg?.res.scores ?? []).slice(0, 5).map((x) => `${x.label.padEnd(16).slice(0, 16)} ${x.score.toFixed(2)} ${bar(x.score)}${resolveCondition(phrase).prompts.includes(x.label) ? " <" : ""}\n`).join("")}
 {dbg ? `MARGIN   ${dbg.margin >= 0 ? "+" : ""}${dbg.margin.toFixed(2)}\nSMOOTHED ${bar(dbg.smoothed)} ${dbg.smoothed.toFixed(2)}\nHITS     ${dbg.hits}/${CONFIG.detection.hitsRequired} needed   ${dbg.level.toUpperCase()}` : "waiting for first window…"}
 {fileRes ? `\nVERDICT  ${fileRes.score >= CONFIG.detection.high ? "model recognises this file: if live mic scores low, suspect capture" : "model does NOT score this file high: model/labels/thresholds, not the mic"}\nFILE     ${fileRes.scores.slice(0, 3).map((x) => `${x.label} ${x.score.toFixed(2)}`).join(" | ")}` : ""}
         </pre>
@@ -298,24 +351,26 @@ WINDOWS  ${dbg?.windows ?? 0} (silent ${dbg?.skipped ?? 0})  ${dbg?.res.ms ?? 0}
   );
 }
 
-function Unlock({ onOpen }: { onOpen: () => void }) {
+function Unlock({ card, onOpen }: { card: Card; onOpen: () => void }) {
   return (
     <>
-      <div className="env" aria-hidden><i className="flap" /><i className="wax broken" /></div>
+      <Envelope theme={themeOf(card)} />
       <h1 className="big small">Signal confirmed.<br />The world unlocked this.</h1>
-      <button className="btn" onClick={onOpen}>Open</button>
+      <button className="btn" onClick={() => { sfx("open"); onOpen(); }}>Open</button>
     </>
   );
 }
 
 function Message({ card, onDone }: { card: Card; onDone: () => void }) {
   const [open, setOpen] = useState(false), [saved, setSaved] = useState(false);
-  useEffect(() => { const t = setTimeout(() => { setOpen(true); navigator.vibrate?.(30); }, 80); return () => clearTimeout(t); }, []);
+  useEffect(() => { const t = setTimeout(() => { setOpen(true); navigator.vibrate?.(30); }, 80); return () => { clearTimeout(t); window.speechSynthesis?.cancel(); }; }, []);
   return (
     <>
-      <div className={`env ${open ? "open" : ""}`} aria-hidden><i className="flap" /></div>
-      <article className="paper"><p className="label">Open when / found</p><blockquote className="letter">{card.message}</blockquote>{card.from && <p className="quiet">— {card.from}</p>}</article>
-      <div className="row"><button className="btn ghost" disabled={saved} onClick={() => { saveLetter(card); setSaved(true); }}>{saved ? "Saved on this device" : "Save"}</button><button className="btn" onClick={onDone}>Close</button></div>
+      <Envelope cls={open ? "open" : ""} theme={themeOf(card)} />
+      {themeOf(card) === "dove" && <Dove className="pass" />}
+      <article className="paper"><Letterhead card={card} /><blockquote className="letter">{card.message}</blockquote>{card.from && <p className="quiet">— {card.from}</p>}</article>
+      <div className="row">{"speechSynthesis" in window && <button className="btn ghost" onClick={() => { speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance(card.message)); }}>Read aloud</button>}
+        <button className="btn ghost" disabled={saved} onClick={() => { saveLetter(card); setSaved(true); }}>{saved ? "Saved on this device" : "Save"}</button><button className="btn" onClick={onDone}>Close</button></div>
     </>
   );
 }

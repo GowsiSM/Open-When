@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { cardUrl, conditionPhrase, decodeCard, encodeCard, isLocalBase, makeCard } from "../src/card";
 import { Detector } from "../src/detector";
+import { CONFIG } from "../src/config";
 import { resample } from "../src/audio";
 import { INITIAL, recover, reduce, Ctx, Ev } from "../src/machine";
 import { isSatisfied, parseCondition } from "../src/condition";
@@ -82,4 +83,52 @@ describe("model registry", () => {
     expect(classify(new Error("boom"), true).kind).toBe("failed");
     expect(classify(new ModelError("unsupported", "x"), true).kind).toBe("unsupported");
   });
+});
+
+import { CONDITIONS, aggregate, resolveCondition } from "../src/conditionConfig";
+import { LETTER_THEMES, themeOf } from "../src/card";
+import { IMPROVEMENT, modelState } from "../src/models";
+describe("letter themes", () => {
+  it("round-trips the chosen theme and falls back to field", () => {
+    LETTER_THEMES.forEach((t) => expect(decodeCard(encodeCard(makeCard({ condition: "birds", message: "x", theme: t.id })))?.th).toBe(t.id));
+    expect(makeCard({ condition: "birds", message: "x", theme: "neon" }).th).toBe("field");
+    expect(themeOf(null)).toBe("field");
+  });
+});
+describe("condition config", () => {
+  it("resolves natural phrases to calibrated conditions and falls back to generic", () => {
+    expect(resolveCondition("running water").id).toBe("running-water");
+    expect(resolveCondition("a stream").id).toBe("running-water");
+    expect(resolveCondition("heavy rain").id).toBe("rain");
+    const g = resolveCondition("a church bell"); expect(g.id).toBe("generic"); expect(g.prompts).toContain("a church bell");
+  });
+  it("every condition has several prompts, rivals, and no prompt/rival overlap", () => {
+    CONDITIONS.forEach((c) => { expect(c.prompts.length).toBeGreaterThan(1); expect(c.rivals.length).toBeGreaterThan(2); expect(c.rivals.filter((r) => c.prompts.includes(r))).toEqual([]); });
+  });
+  it("lets one condition override detector params", () => {
+    const d = new Detector({ ...CONFIG.detection, minConfirmMs: 0, hitsRequired: 1 }); expect(d.push(0.95, 0).level).toBe("confirmed");
+  });
+});
+describe("prompt aggregation", () => {
+  const cfg = resolveCondition("running water"), p = cfg.prompts;
+  it("sums the positive prompts and keeps a clear margin", () => {
+    const a = aggregate([{ label: p[0], score: 0.3 }, { label: p[1], score: 0.3 }, { label: "rain", score: 0.2 }], cfg);
+    expect(a.raw).toBeCloseTo(0.6); expect(a.score).toBeCloseTo(0.6); expect(a.margin).toBeCloseTo(0.4);
+  });
+  it("penalises a thin margin so a rival cannot sneak a win", () => {
+    const a = aggregate([{ label: p[0], score: 0.2 }, { label: "rain", score: 0.5 }], cfg);
+    expect(a.score).toBeCloseTo(0.1);
+  });
+  it("max mode and clamping", () => {
+    expect(aggregate([{ label: p[0], score: 0.9 }, { label: p[1], score: 0.9 }], cfg).raw).toBe(1);
+    expect(aggregate([{ label: p[0], score: 0.4 }, { label: p[1], score: 0.3 }], { ...cfg, aggregate: "max" }).raw).toBe(0.4);
+  });
+});
+describe("offline model states", () => {
+  it("names all four states plus checking", () => {
+    expect(modelState(false, true)).toBe("Online · model not installed"); expect(modelState(true, true)).toBe("Online · model ready");
+    expect(modelState(true, false)).toBe("Offline · model ready"); expect(modelState(false, false)).toBe("Offline · model not installed");
+    expect(modelState(null, true)).toContain("checking");
+  });
+  it("labels unmeasured improvements as such", () => { expect(IMPROVEMENT.filter((i) => i.status === "planned").length).toBeGreaterThan(1); });
 });

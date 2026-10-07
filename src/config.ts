@@ -9,6 +9,7 @@ export const CONFIG = {
   audio: {
     windowSec: 5, // length of each analysed window
     hopSec: 2, // how often a new window is scored
+    normalize: false, // RMS-normalise windows before the model (untested; flip in ?debug experiments)
     silenceRms: 0.002, // windows quieter than this are treated as "mic dead/silent", not scored
   },
   detection: {

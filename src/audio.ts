@@ -98,3 +98,30 @@ export class AudioEngine {
   }
   pulse() { navigator.vibrate?.(25); }
 }
+
+/** Scale a window toward a target RMS (capped gain) so quiet streams and loud streets look alike to the model. */
+export function normalize(a: Float32Array, target = 0.05, maxGain = 10): Float32Array {
+  const r = rms(a);
+  if (r < 1e-6) return a;
+  const g = Math.min(maxGain, target / r), out = new Float32Array(a.length);
+  for (let i = 0; i < a.length; i++) out[i] = Math.max(-1, Math.min(1, a[i] * g));
+  return out;
+}
+
+/** Tiny UI sounds, only used when the mic is not running. Never required. */
+export function sfx(kind: "seal" | "open") {
+  try {
+    const ctx = new AudioContext(), t = ctx.currentTime, g = ctx.createGain();
+    g.connect(ctx.destination);
+    if (kind === "seal") {
+      const o = ctx.createOscillator(); o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(60, t + 0.12);
+      g.gain.setValueAtTime(0.25, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.18); o.connect(g); o.start(t); o.stop(t + 0.2);
+    } else {
+      const n = Math.floor(ctx.sampleRate * 0.35), b = ctx.createBuffer(1, n, ctx.sampleRate), d = b.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+      const s = ctx.createBufferSource(), f = ctx.createBiquadFilter(); s.buffer = b; f.type = "highpass"; f.frequency.value = 2500; g.gain.value = 0.12;
+      s.connect(f); f.connect(g); s.start(t);
+    }
+    setTimeout(() => ctx.close(), 600);
+  } catch {}
+}

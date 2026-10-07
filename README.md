@@ -36,9 +36,17 @@ download (retry keeps finished files), and corruption (Remove & retry). `src/mod
 registry: condition mode -> required model. Only the model a condition needs is installed.
 SEE / FIND / Gemma-based condition parsing are listed as **planned** and are not implemented.
 
+## Letter styles
+Three styles, chosen when creating a letter and stored in the link: **The old letter** (warm paper, wax seal), **Field letter** (notebook paper, "open outside", line sketches), **Dove / memory** (slate-blue, a line-art dove on the seal, a small marker while listening, and a brief pass when the letter opens). Styles change only CSS variables and ornaments; the state machine and detector are shared. Fonts are system stacks (works offline); the handwriting accent depends on the device's script fonts. Field mode forces a dark screen for every style.
+
+## Detection improvements
+`src/conditionConfig.ts`: per-condition prompt ensembles, rivals, margin, and detector overrides (`resolveCondition`, `aggregate`). Unmeasured; see `MODEL_FINE_TUNING.md`.
+
+## Deploy
+`render.yaml` (Render static site, unverified) or any static host with HTTPS.
+
 ## Model
-`Xenova/clap-htsat-unfused` (ONNX conversion of LAION CLAP), loaded `q8`. License believed
-Apache-2.0; size, latency and accuracy are **not yet measured**: check the model card, then fill in
+`Xenova/clap-htsat-unfused` (ONNX conversion of LAION CLAP), loaded `q8`. Upstream `laion/clap-htsat-unfused` lists Apache-2.0 on its model page; the Xenova ONNX conversion's own license field could not be read, so check it before redistributing. Size, latency and accuracy are **not yet measured**: check the model card, then fill in
 real numbers from `?debug` on your phone. Weak spots expected: faint targets, wind, overlapping sounds.
 
 ## Debug / field test

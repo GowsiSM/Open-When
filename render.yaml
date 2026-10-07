@@ -1,0 +1,14 @@
+# Static HTTPS hosting for the phone demo. Written from Render's blueprint format; NOT deployed or verified here.
+services:
+  - type: web
+    name: open-when
+    runtime: static
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    headers:
+      - path: /sw.js
+        name: Cache-Control
+        value: no-cache
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff

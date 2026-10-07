@@ -9,8 +9,8 @@ export interface ModelInfo {
 }
 export const MODELS: ModelInfo[] = [
   { id: "clap", name: "CLAP", tagline: "Environmental audio", mode: "hear", hfId: CONFIG.model.id,
-    sourceUrl: "https://huggingface.co/" + CONFIG.model.id, license: "Apache-2.0 (verify on the model card)", estMB: 45, recommended: true, available: true,
-    why: "CLAP matches sounds to written descriptions, which is what turns “open when you hear running water” into a detection task. It runs on your device; audio is never uploaded." },
+    sourceUrl: "https://huggingface.co/" + CONFIG.model.id, license: "Apache-2.0 (upstream laion/clap-htsat-unfused)", estMB: 45, recommended: true, available: true,
+    why: "CLAP matches sounds to written descriptions, which is what turns “open when you hear running water” into a detection task. It runs on your device; audio is never uploaded. License: the upstream LAION model page lists Apache-2.0; the Xenova ONNX conversion Open When downloads has its own page, whose license field I could not read, so check it before redistributing." },
   { id: "vision", name: "Vision model", tagline: "SEE conditions (planned)", mode: "see", hfId: "", sourceUrl: "", license: "tbd", estMB: null, recommended: false, available: false,
     why: "For “open when you see a sunset”. Not shipped: no phone-reliable model chosen yet." },
   { id: "ocr", name: "Text / OCR model", tagline: "FIND conditions (planned)", mode: "find", hfId: "", sourceUrl: "", license: "tbd", estMB: null, recommended: false, available: false,
@@ -30,6 +30,22 @@ export const classify = (e: any, online: boolean): ModelError => {
   return new ModelError("failed", e?.message ?? "Install failed.");
 };
 export const supported = () => typeof caches !== "undefined" && typeof WebAssembly !== "undefined" && window.isSecureContext;
+
+export const modelState = (installed: boolean | null, online: boolean) =>
+  `${online ? "Online" : "Offline"} · ${installed === null ? "checking model" : installed ? "model ready" : "model not installed"}`;
+export const IMPROVEMENT = [
+  { name: "Prompt ensemble", status: "in app", note: "Several phrasings per sound, summed. Gain not measured yet." },
+  { name: "Condition calibration", status: "in app", note: "Per-sound margin and detector overrides. Values are uncalibrated defaults." },
+  { name: "Hard-negative dataset", status: "planned", note: "Real recordings of confusing sounds." },
+  { name: "Lightweight classifier on CLAP embeddings", status: "planned", note: "Small head, may be the best next step." },
+  { name: "Fine-tuned model", status: "planned", note: "Only if the above fall short. See MODEL_FINE_TUNING.md." },
+];
+export const PRIVACY = [
+  "Microphone audio stays on this device. It is analysed in short windows in memory and discarded.",
+  "No raw recordings are uploaded or stored. Inference runs locally.",
+  "Letters stay on this device unless you share the link. A link contains the message, so share it with care.",
+  "The internet is only used to install the model once. No analytics or error reporting is included.",
+];
 
 const KEY = "ow:model-bytes";
 export const installedBytes = () => { try { return Number(localStorage.getItem(KEY)) || null; } catch { return null; } };

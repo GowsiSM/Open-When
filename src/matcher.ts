@@ -1,8 +1,9 @@
 import { CONFIG } from "./config";
 import { conditionPhrase } from "./card";
+import { aggregate, resolveCondition } from "./conditionConfig";
 
 export interface LabelScore { label: string; score: number }
-export interface MatchResult { score: number; scores: LabelScore[]; ms: number }
+export interface MatchResult { score: number; raw: number; margin: number; cfgId: string; scores: LabelScore[]; ms: number }
 
 // The rest of the app only knows this interface. Swap the model by swapping the class.
 export interface AudioMatcher {
@@ -22,9 +23,7 @@ export function loadClap(onP?: (p: Progress) => void): Promise<any> {
   clapP ??= (async () => {
     const { pipeline, env } = await import("@huggingface/transformers");
     env.allowLocalModels = false;
-    (env.backends.onnx as any).wasm.wasmPaths = import.meta.env.DEV
-      ? "/node_modules/onnxruntime-web/dist/"
-      : import.meta.env.BASE_URL + "ort/"; // Vite must transform the .mjs in dev; production uses copied local assets.
+    (env.backends.onnx as any).wasm.wasmPaths = import.meta.env.BASE_URL + "ort/"; // served locally: works offline
     const files: Record<string, [number, number]> = {};
     return (pipeline as any)("zero-shot-audio-classification", CONFIG.model.id, {
       dtype: CONFIG.model.dtype,
@@ -45,14 +44,13 @@ export class ClapMatcher implements AudioMatcher {
   async load(onProgress?: (pct: number) => void) { this.clf = await loadClap(onProgress && ((p) => onProgress(p.pct))); }
   async match(audio: Float32Array, condition: string): Promise<MatchResult> {
     const t0 = performance.now();
-    const phrase = conditionPhrase(condition);
-    const out = (await this.clf(audio, [phrase, ...rivalsFor(phrase)], { hypothesis_template: CONFIG.model.template })) as LabelScore[];
-    const scores = [...out].sort((a, b) => b.score - a.score);
-    return { score: out.find((o) => o.label === phrase)?.score ?? 0, scores, ms: Math.round(performance.now() - t0) };
+    const cfg = resolveCondition(conditionPhrase(condition));
+    const labels = [...cfg.prompts, ...cfg.rivals.filter((r) => !cfg.prompts.includes(r))];
+    const out = (await this.clf(audio, labels, { hypothesis_template: CONFIG.model.template })) as LabelScore[];
+    const a = aggregate(out, cfg);
+    return { score: a.score, raw: a.raw, margin: a.margin, cfgId: cfg.id, scores: [...out].sort((x, y) => y.score - x.score), ms: Math.round(performance.now() - t0) };
   }
 }
-export const rivalsFor = (phrase: string) =>
-  CONFIG.negatives.filter((n) => !phrase.includes(n) && !n.includes(phrase) && !(phrase.includes("bird") && n.includes("bird")));
 
 // Dev fallback (?mock=1): loudness as a stand-in score, to exercise the UI without a model.
 export class MockMatcher implements AudioMatcher {
@@ -61,7 +59,7 @@ export class MockMatcher implements AudioMatcher {
     let s = 0;
     for (const x of audio) s += x * x;
     const score = Math.min(1, Math.sqrt(s / audio.length) * 12);
-    return { score, scores: [{ label: conditionPhrase(condition), score }], ms: 0 };
+    return { score, raw: score, margin: 0, cfgId: "mock", scores: [{ label: conditionPhrase(condition), score }], ms: 0 };
   }
 }
 

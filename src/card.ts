@@ -1,5 +1,14 @@
 // A card is a tiny payload encoded into the URL hash. No backend.
+export type LetterTheme = "old" | "field" | "dove";
+export const LETTER_THEMES: { id: LetterTheme; name: string; blurb: string }[] = [
+  { id: "old", name: "The old letter", blurb: "Warm paper, ink, a wax seal." },
+  { id: "field", name: "Field letter", blurb: "Notebook paper, an instruction to go outside." },
+  { id: "dove", name: "Dove / memory", blurb: "Quiet, personal. A dove carries it." },
+];
+export const themeOf = (c: { th?: string } | null | undefined): LetterTheme => (LETTER_THEMES.some((t) => t.id === c?.th) ? (c!.th as LetterTheme) : "field");
+
 export interface Card {
+  th: LetterTheme;
   v: 1;
   title: string;
   condition: string;
@@ -18,13 +27,14 @@ const fromB64 = (s: string) => {
   return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
 };
 
-export function makeCard(input: { condition: string; message: string; title?: string; from?: string }): Card {
+export function makeCard(input: { condition: string; message: string; title?: string; from?: string; theme?: string }): Card {
   const condition = input.condition.trim();
   const message = input.message.trim();
   if (!condition) throw new Error("Add a condition.");
   if (!message) throw new Error("Write a message.");
   return {
     v: 1,
+    th: themeOf({ th: input.theme }),
     title: input.title?.trim() || "Open when",
     condition,
     message,
@@ -38,7 +48,7 @@ export function decodeCard(payload: string): Card | null {
   try {
     const o = JSON.parse(fromB64(payload));
     if (o?.v !== 1 || typeof o.condition !== "string" || typeof o.message !== "string") return null;
-    return makeCard({ condition: o.condition, message: o.message, title: o.title, from: o.from });
+    return makeCard({ condition: o.condition, message: o.message, title: o.title, from: o.from, theme: o.th });
   } catch {
     return null;
   }
