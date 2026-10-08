@@ -9,8 +9,7 @@ import { IMPROVEMENT, MODELS, ModelError, PRIVACY, modelState, classify, install
 import { Detector, Level } from "./detector";
 import { parseCondition } from "./condition";
 import { Ctx, Ev, INITIAL, Phase, inField, recover, reduce } from "./machine";
-import { getTheme, loadSession, saveLetter, saveSession, saveTheme } from "./store";
-import { Theme, applyTheme, nextTheme, themeLabel, watchSystem } from "./theme";
+import { loadSession, saveLetter, saveSession } from "./store";
 import { RunLog } from "./log";
 import "./styles.css";
 
@@ -30,7 +29,6 @@ function App() {
   const engine = useRef<AudioEngine | null>(null);
   const online = useOnline();
   const [installed, setInstalled] = useState<boolean | null>(null);
-  const [theme, setT] = useState<Theme>(getTheme());
   const [models, setModels] = useState(false);
   const [pick, setPick] = useState<LetterTheme>("field");
   const p = ctx.phase;
@@ -38,17 +36,19 @@ function App() {
   useEffect(() => { modelInstalled().then(setInstalled); }, [p, models]);
   const begin = () => { engine.current = new AudioEngine(); engine.current.prepare(); dispatch({ t: "BEGIN", now: Date.now() }); }; // inside the tap
   const home = () => { history.replaceState(null, "", location.pathname + location.search); dispatch({ t: "HOME" }); };
-  const cycle = () => { const n = nextTheme(theme); saveTheme(n); setT(n); };
-  useEffect(() => { applyTheme(theme); return theme === "system" ? watchSystem(() => applyTheme("system")) : undefined; }, [theme]);
   const ai = modelState(installed, online);
   const lt = ctx.card ? themeOf(ctx.card) : p === "create" ? pick : null;
-  useEffect(() => { const r = document.documentElement; lt ? (r.dataset.letter = lt) : delete r.dataset.letter; r.toggleAttribute("data-field", p === "searching"); }, [lt, p]);
+  useEffect(() => {
+    const r = document.documentElement;
+    lt ? (r.dataset.letter = lt) : delete r.dataset.letter;
+    r.toggleAttribute("data-field", inField(p) || p === "confirmed");
+  }, [lt, p]);
 
   return (
     <main className={`screen ${p === "searching" ? "field" : ""}`}>
       <header className="top field-hide">
         <span className="label">Open when</span>
-        <span><button className="link" onClick={() => setModels(true)}>Local AI</button> <button className="link themebtn" onClick={cycle} aria-label={`Theme: ${themeLabel(theme)}. Tap to change`} title="Theme: Auto → Light → Dark"><ThemeIcon theme={theme} />{themeLabel(theme)}</button></span>
+        <button className="link" onClick={() => setModels(true)}>Local AI</button>
       </header>
       {models && <Models online={online} onClose={() => setModels(false)} />}
       {!models && p === "home" && <Home ai={ai} onCreate={() => dispatch({ t: "CREATE" })} />}
@@ -63,13 +63,6 @@ function App() {
   );
 }
 
-const ThemeIcon = ({ theme }: { theme: Theme }) => (
-  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden>
-    {theme === "light" ? <><circle cx="8" cy="8" r="3" /><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1" /></>
-      : theme === "dark" ? <path d="M13 9.5A5.5 5.5 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5Z" />
-      : <><circle cx="8" cy="8" r="5.5" /><path d="M8 2.5v11a5.5 5.5 0 0 0 0-11Z" fill="currentColor" /></>}
-  </svg>
-);
 const Dove = ({ className = "" }: { className?: string }) => (
   <svg className={`dove ${className}`} viewBox="0 0 64 40" width="44" height="28" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <path d="M4 31C14 30 24 27 32 22C38 18 42 17 46 17C47 12 51 9 55 10L61 12L55 14C54 19 50 24 44 27C36 32 22 34 4 31Z" /><path d="M30 22C28 12 22 6 12 3C18 10 20 17 24 24" />
@@ -271,6 +264,7 @@ function Listen({ eng, card, phase, dispatch }: { eng: AudioEngine; card: Card; 
   const logRef = useRef(new RunLog());
   const levelRef = useRef<Level>("none");
   const matcherRef = useRef<AudioMatcher | null>(null);
+  const advanceRef = useRef<number | null>(null);
 
   useEffect(() => {
     let dead = false, busy = false, windows = 0, skipped = 0;
@@ -296,7 +290,13 @@ function Listen({ eng, card, phase, dispatch }: { eng: AudioEngine; card: Card; 
             levelRef.current = r.level; setLevel(r.level); if (r.level !== "confirmed") dispatch({ t: "SIGNAL", level: r.level });
             logRef.current.add({ t: Date.now(), rms: level_, raw: res.raw, score: res.score, margin: res.margin, smoothed: r.smoothed, hits: r.hits, level: r.level, ms: res.ms, top: res.scores[0]?.label ?? "" });
             setDbg({ rms: level_, windows, skipped, res, margin: res.margin, smoothed: r.smoothed, hits: r.hits, level: r.level });
-            if (r.level === "confirmed" && !dead) { dead = true; dispatch({ t: "CONFIRMED", now: Date.now() }); eng.chime(); setTimeout(() => dispatch({ t: "ACK" }), 1200); }
+            if (r.level === "confirmed" && !dead) {
+              dead = true;
+              eng.chime();
+              eng.stop();
+              dispatch({ t: "CONFIRMED", now: Date.now() });
+              advanceRef.current = window.setTimeout(() => dispatch({ t: "ACK" }), 1500);
+            }
           } catch (e: any) { setStatus("Model error: " + (e?.message ?? e)); }
           finally { busy = false; }
         });
@@ -314,7 +314,14 @@ function Listen({ eng, card, phase, dispatch }: { eng: AudioEngine; card: Card; 
         eng.beep(l === "high" ? 880 : 520, 60, l === "high" ? 0.2 : 0.1); eng.pulse();
       }
     }, CONFIG.feedback.tickMs);
-    return () => { dead = true; eng.stop(); clearInterval(clock); clearTimeout(field); clearInterval(fb); };
+    return () => {
+      dead = true;
+      eng.stop();
+      clearInterval(clock);
+      clearTimeout(field);
+      clearInterval(fb);
+      if (advanceRef.current !== null) clearTimeout(advanceRef.current);
+    };
   }, []);
 
   // Scores a recorded file through the same model, to separate "mic capture" problems from "model" problems.
@@ -336,7 +343,7 @@ function Listen({ eng, card, phase, dispatch }: { eng: AudioEngine; card: Card; 
         {themeOf(card) === "dove" && <Dove className={`marker ${phase === "confirmed" ? "fly" : ""}`} />}
         <span className={`dot ${level}`} role="img" aria-label={LABEL[level]} />
         <p className="quiet">{phrase}</p>
-        <p className="label" role="status" aria-live="polite">{phase === "confirmed" ? "Confirmed" : status === "Listening" ? LABEL[level] : status}</p>
+        <p className={`label ${phase === "confirmed" ? "confirmed-text" : ""}`} role="status" aria-live="polite">{phase === "confirmed" ? "Signal confirmed · opening your letter…" : status === "Listening" ? LABEL[level] : status}</p>
       </div>
       {debug && (
         <pre className="debug">

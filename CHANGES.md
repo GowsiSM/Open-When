@@ -1,25 +1,15 @@
-# Changes in this revision
+# Current revision
 
-## Fixed
-- **Light/Dark toggle did nothing on most screens.** Root cause: letter styles (`data-letter`) set
-  `--bg/--fg` with light-only colours and came later in the CSS, so they overrode the toggle whenever a
-  letter was active (including the Create screen, which defaults to the Field style). Now palettes are
-  keyed by a resolved `data-mode`, and every letter style has light and dark variants.
-- Unverified "about 45 MB" claim removed from the Ready and Local AI screens; real size is shown while installing.
-- Stale README test count.
+## Updated
+- Kept the general interface light-only and retained the intentionally dark palette during all active
+  listening/signal phases, independent of letter style.
+- Improved narrow-screen wrapping, line spacing, model detail readability, and debug output wrapping.
+- Strong confirmed signals use a green indicator and status. The microphone flow stops and advances to
+  the explicit letter-opening screen after the confirmation cue.
+- Documented a Render static-site deployment and clarified that SEE, FIND/OCR, Gemma parsing, and
+  model fine-tuning are not implemented or measured.
 
-## Added
-- `src/theme.ts`: preference -> mode resolution, OS-change listener, browser `theme-color` sync, early no-flash script.
-- Theme button with an icon and an accessible label (Auto / Light / Dark).
-- `src/log.ts`: field-calibration CSV log (copy / download / clear, with a "where are you" label) in `?debug`.
-- Audio: wake lock re-acquired on return to the page, AudioContext resumed after interruptions, mic-lost message.
-- Listening status is announced to screen readers (`aria-live`).
-- 8 new tests (38 total), including a CSS regression guard for the toggle bug.
-
-## Verified here
-- 38 unit tests pass, `tsc` clean, production build succeeds.
-- In headless Chrome: the toggle switches the background on Home and Create, and all three letter styles
-  switch between light and dark.
-
-## NOT verified (still the real next step)
-- Real phone, real microphone, real running water, offline mode, Render deploy, threshold calibration.
+## Still needs real-device verification
+- Microphone permission, offline model caching, signal thresholds, and visual behavior on target phones.
+- The first Render deployment and public share-link flow.
+- Model size, latency, and accuracy measurements; fine-tuning needs a labelled dataset first.

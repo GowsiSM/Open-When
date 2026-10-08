@@ -49,6 +49,13 @@ describe("state machine", () => {
     let c = run([{ t: "BEGIN", now: 0 }, { t: "FIELD" }, { t: "SIGNAL", level: "medium" }, { t: "SIGNAL", level: "none" }, { t: "SIGNAL", level: "high" }, { t: "CONFIRMED", now: 60000 }, { t: "ACK" }, { t: "OPEN" }, { t: "FINISH" }], sealed);
     expect(c.phase).toBe("summary"); expect(c.listenMs).toBe(60000); expect(c.foundAt).toBe(60000);
   });
+  it("shows the unlock result after confirmation and opens the message on the next action", () => {
+    const confirmed = run([{ t: "BEGIN", now: 0 }, { t: "CONFIRMED", now: 60000 }], sealed);
+    expect(confirmed.phase).toBe("confirmed");
+    const result = reduce(confirmed, { t: "ACK" });
+    expect(result.phase).toBe("unlock");
+    expect(reduce(result, { t: "OPEN" }).phase).toBe("message");
+  });
   it("ignores invalid transitions", () => {
     expect(reduce(INITIAL, { t: "OPEN" })).toBe(INITIAL); expect(reduce(INITIAL, { t: "BEGIN", now: 1 })).toBe(INITIAL);
     expect(reduce(sealed, { t: "CONFIRMED", now: 1 }).phase).toBe("ready"); expect(run([{ t: "BEGIN", now: 0 }, { t: "HOME" }], sealed).phase).toBe("listening");
@@ -134,32 +141,15 @@ describe("offline model states", () => {
 });
 
 import { readFileSync } from "node:fs";
-import { THEME_COLOR, nextTheme, resolveMode, themeLabel } from "../src/theme";
 import { RunLog, csvCell } from "../src/log";
 
-describe("theme toggle", () => {
-  it("resolves the preference to a concrete mode", () => {
-    expect(resolveMode("light", true)).toBe("light"); expect(resolveMode("dark", false)).toBe("dark");
-    expect(resolveMode("system", true)).toBe("dark"); expect(resolveMode("system", false)).toBe("light");
-  });
-  it("cycles Auto -> Light -> Dark -> Auto and labels each", () => {
-    expect(nextTheme("system")).toBe("light"); expect(nextTheme("light")).toBe("dark"); expect(nextTheme("dark")).toBe("system");
-    expect(["system", "light", "dark"].map((t) => themeLabel(t as any))).toEqual(["Auto", "Light", "Dark"]);
-    expect(THEME_COLOR.dark).not.toBe(THEME_COLOR.light);
-  });
-  // Regression guard for the original bug: letter styles only had light palettes, so they overrode the toggle.
-  const css = readFileSync("src/styles.css", "utf8");
-  it("every letter style defines both a light and a dark palette", () => {
-    for (const t of LETTER_THEMES.map((x) => x.id)) {
-      expect(css).toContain(`:root[data-mode="light"][data-letter="${t}"]`);
-      expect(css).toContain(`:root[data-mode="dark"][data-letter="${t}"]`);
-    }
-  });
-  it("no palette depends on the OS setting or the raw data-theme attribute", () => {
-    expect(css).not.toContain("prefers-color-scheme"); expect(css).not.toMatch(/:root\[data-theme/);
-  });
-  it("field mode override comes after the letter palettes", () => {
-    expect(css.indexOf(":root[data-field][data-mode]")).toBeGreaterThan(css.lastIndexOf('[data-letter="dove"]'));
+describe("visual theme layout", () => {
+  it("keeps the interface light and lets field mode override every letter palette", () => {
+    const css = readFileSync("src/styles.css", "utf8");
+    expect(css).toContain(":root { --bg:#f1eee6");
+    for (const t of LETTER_THEMES) expect(css).toContain(`:root[data-letter="${t.id}"]`);
+    expect(css.indexOf(":root[data-field]")).toBeGreaterThan(css.lastIndexOf('[data-letter="dove"]'));
+    expect(css).toContain(".dot.confirmed { background:#287a45");
   });
 });
 

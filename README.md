@@ -18,7 +18,7 @@ no audio upload, no server dependency, no per-call cost, and a model you can swa
 ```bash
 npm install
 npm run dev:https   # self-signed HTTPS so a phone on your Wi-Fi gets microphone access
-npm test            # 38 tests: cards, conditions, detector, state machine, theme toggle, run log, matcher
+npm test            # cards, conditions, detector, state machine, layout theme, run log, matcher
 npm run build       # static dist/ (deploy to Vercel/Netlify); set VITE_PUBLIC_URL for share links
 ```
 `predev`/`prebuild` copy the ONNX runtime wasm to `public/ort` so inference never needs a CDN.
@@ -36,13 +36,11 @@ download (retry keeps finished files), and corruption (Remove & retry). `src/mod
 registry: condition mode -> required model. Only the model a condition needs is installed.
 SEE / FIND / Gemma-based condition parsing are listed as **planned** and are not implemented.
 
-## Theme (Auto / Light / Dark)
-The top-bar button cycles Auto -> Light -> Dark. `src/theme.ts` resolves the preference to a concrete
-mode and writes `<html data-mode>`; every palette in `styles.css` is keyed off `data-mode`, and each
-letter style has a light **and** a dark palette. An inline script in `index.html` sets the mode before
-first paint (no flash). Field mode (screen nearly blank outdoors) stays dark on purpose. A test fails
-if a letter style is added without both palettes. (The old bug: letter styles only defined light colours,
-so they overrode the toggle on every screen that had a letter.)
+## Theme
+The regular interface stays light. Letter styles change their paper, ink, type and ornaments, not the
+global theme. Active listening uses a dark, low-distraction screen for every letter style and returns
+to the selected letter palette when listening ends. The confirmation signal turns green before the
+app advances to the letter-opening screen.
 
 ## Letter styles
 Three styles, chosen when creating a letter and stored in the link: **The old letter** (warm paper, wax seal), **Field letter** (notebook paper, "open outside", line sketches), **Dove / memory** (slate-blue, a line-art dove on the seal, a small marker while listening, and a brief pass when the letter opens). Styles change only CSS variables and ornaments; the state machine and detector are shared. Fonts are system stacks (works offline); the handwriting accent depends on the device's script fonts. Field mode forces a dark screen for every style.
@@ -50,8 +48,31 @@ Three styles, chosen when creating a letter and stored in the link: **The old le
 ## Detection improvements
 `src/conditionConfig.ts`: per-condition prompt ensembles, rivals, margin, and detector overrides (`resolveCondition`, `aggregate`). Unmeasured; see `MODEL_FINE_TUNING.md`.
 
-## Deploy
-`render.yaml` (Render static site, unverified) or any static host with HTTPS.
+## Deploy to Render
+The project is a static Vite app; Render does not need a server or database.
+
+1. Push this project to a GitHub repository.
+2. In Render, choose **New + → Blueprint**, connect the repository, and let Render read `render.yaml`.
+   Or create a **Static Site** manually with build command `npm ci && npm run build` and publish
+   directory `dist`.
+3. Wait for the build to finish, open the generated `https://...onrender.com` URL, and create a test
+   letter. Share its generated link with another phone to check the full flow.
+4. Microphone access requires HTTPS. On the receiving phone, allow microphone access and install the
+   local AI model once while online; later listening works offline if the browser keeps the model cache.
+5. If using a custom domain or a non-root base path, set `VITE_PUBLIC_URL` to the public app URL before
+   building so shared letter links point to the correct address. For the default Render URL, the app
+   uses its current origin automatically.
+
+The supplied `render.yaml` is a deployment configuration, not a live deployment; verify the first
+Render build and test microphone permissions on a real phone.
+
+## Improving / fine-tuning the model
+Vision (SEE), OCR (FIND), and Gemma condition parsing are explicitly **not implemented**. The model
+registry marks them unavailable; no camera permissions or unsupported model downloads are implied.
+CLAP prompt ensembles and per-condition calibration are implemented but unmeasured. Fine-tuning
+requires consented, labelled positive and hard-negative recordings plus held-out evaluation data; no
+training data or tuned weights are included. Follow [MODEL_FINE_TUNING.md](./MODEL_FINE_TUNING.md)
+to collect/evaluate responsibly and start with calibration before training.
 
 ## Model
 `Xenova/clap-htsat-unfused` (ONNX conversion of LAION CLAP), loaded `q8`. Upstream `laion/clap-htsat-unfused` lists Apache-2.0 on its model page; the Xenova ONNX conversion's own license field could not be read, so check it before redistributing. Size, latency and accuracy are **not yet measured**: check the model card, then fill in
