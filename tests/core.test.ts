@@ -34,11 +34,23 @@ describe("conditions", () => {
 describe("detector", () => {
   const feed = (xs: number[]) => { const d = new Detector(); return xs.map((x, i) => d.push(x, i * 2000).level); };
   it("does not unlock from a single spike", () => expect(feed([0.1, 0.1, 0.1, 0.99]).includes("confirmed")).toBe(false));
-  it("needs sustained high scores for the minimum duration", () => {
+  it("needs sustained high scores for the minimum confirmation duration", () => {
     const l = feed([0.3, 0.8, 0.9, 0.9, 0.9, 0.9]);
-    expect(l[3]).not.toBe("confirmed"); expect(l[5]).toBe("confirmed");
+    expect(l[2]).not.toBe("confirmed"); expect(l[3]).toBe("confirmed");
   });
-  it("a dip resets the streak and starts a cooldown", () => { expect(feed([0.9, 0.9, 0.9, 0.0, 0.0, 0.9, 0.9]).includes("confirmed")).toBe(false); });
+  it("a dip resets the streak and starts a cooldown", () => {
+    const d = new Detector();
+    const levels = [
+      d.push(0.9, 0).level,
+      d.push(0.9, 2000).level,
+      d.push(0.0, 4000).level,
+      d.push(0.9, 5000).level,
+      d.push(0.9, 6000).level,
+      d.push(0.9, 8000).level,
+    ];
+    expect(levels[4]).not.toBe("confirmed");
+    expect(levels[5]).toBe("confirmed");
+  });
   it("ramps through levels", () => { const d = new Detector(); expect(d.push(0.05, 0).level).toBe("none"); d.push(0.6, 2000); expect(d.push(0.6, 4000).level).toBe("medium"); });
   it("reset clears state", () => { const d = new Detector(); [0.9, 0.9, 0.9].forEach((x, i) => d.push(x, i * 2000)); d.reset(); expect(d.push(0.1, 9000).level).toBe("none"); });
 });

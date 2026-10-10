@@ -20,7 +20,7 @@ export const CONFIG = {
     confirm: 0.6, // smoothed score needed to unlock...
     hitsRequired: 2, // ...plus this many of the last `hitsWindow` raw scores >= `high`
     hitsWindow: 3,
-    minConfirmMs: 4000, // the unlock condition must hold continuously this long
+    minConfirmMs: 2000, // keep the confident signal sustained for one analysis hop
     cooldownMs: 2000, // after a broken streak, wait before a new one may start
   },
   fieldDelayMs: 10000, // listening -> searching: the screen goes nearly blank
