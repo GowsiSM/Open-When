@@ -350,11 +350,11 @@ function Listen({ eng, card, phase, dispatch }: { eng: AudioEngine; card: Card; 
 {`MIC      ${eng.info().state}  ${eng.info().rate}Hz (track ${eng.info().track || "?"})
 LEVEL    ${dbg ? dbg.rms.toFixed(4) : "-"} rms  ${dbg && dbg.rms < CONFIG.audio.silenceRms ? "SILENT" : ""}
 MODEL    ${CONFIG.model.id} loaded
-TARGET   ${phrase} [${resolveCondition(phrase).id}] ${resolveCondition(phrase).prompts.length} prompts / ${resolveCondition(phrase).rivals.length} rivals
-NORMALIZE ${CONFIG.audio.normalize ? "on" : "off"}   RAW ${dbg ? dbg.res.raw.toFixed(2) : "-"} (summed prompts)
+TARGET   ${phrase} [${resolveCondition(phrase).id}] linear-head class
+NORMALIZE ${CONFIG.audio.normalize ? "on" : "off"}   RAW ${dbg ? dbg.res.raw.toFixed(2) : "-"} (target class probability)
 WINDOWS  ${dbg?.windows ?? 0} (silent ${dbg?.skipped ?? 0})  ${dbg?.res.ms ?? 0}ms/inference
 `}
-{(dbg?.res.scores ?? []).slice(0, 5).map((x) => `${x.label.padEnd(16).slice(0, 16)} ${x.score.toFixed(2)} ${bar(x.score)}${resolveCondition(phrase).prompts.includes(x.label) ? " <" : ""}\n`).join("")}
+{(dbg?.res.scores ?? []).slice(0, 5).map((x) => `${x.label.padEnd(16).slice(0, 16)} ${x.score.toFixed(2)} ${bar(x.score)}${resolveCondition(phrase).prompts.includes(x.label) || x.label.replace(/\s+/g, "-") === resolveCondition(phrase).id ? " <" : ""}\n`).join("")}
 {dbg ? `MARGIN   ${dbg.margin >= 0 ? "+" : ""}${dbg.margin.toFixed(2)}\nSMOOTHED ${bar(dbg.smoothed)} ${dbg.smoothed.toFixed(2)}\nHITS     ${dbg.hits}/${CONFIG.detection.hitsRequired} needed   ${dbg.level.toUpperCase()}` : "waiting for first window…"}
 {fileRes ? `\nVERDICT  ${fileRes.score >= CONFIG.detection.high ? "model recognises this file: if live mic scores low, suspect capture" : "model does NOT score this file high: model/labels/thresholds, not the mic"}\nFILE     ${fileRes.scores.slice(0, 3).map((x) => `${x.label} ${x.score.toFixed(2)}`).join(" | ")}` : ""}
         </pre>

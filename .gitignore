@@ -2,3 +2,28 @@ node_modules
 dist
 .DS_Store
 public/ort
+.venv/
+venv/
+pycache/
+*.py[cod]
+.env
+.env.*
+training/data/
+training/datasets/
+training/outputs/
+training/checkpoints/
+training/runs/
+training/*.wav
+*.pt
+*.pth
+*.onnx
+*.h5
+*.keras
+.DS_Store
+public/ort
+# Local Python environment
+.venv/
+venv/
+
+# Ignore training data and generated files
+training/

@@ -2,7 +2,7 @@
 export const CONFIG = {
   model: {
     id: "Xenova/clap-htsat-unfused", // open-weight CLAP, runs in-browser
-    dtype: "q8", // quantized weights: smaller download, faster on phones
+    dtype: "q8" as const, // quantized weights: smaller download, faster on phones
     sampleRate: 48000,
     template: "This is a sound of {}.",
   },
