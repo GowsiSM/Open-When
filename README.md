@@ -1,12 +1,30 @@
-# Open When
+<h1 align="center">Open When</h1>
 
-**A letter that only opens when the world says so.**
+<p align="center">
+  <strong>A letter that only opens when the world says so.</strong><br />
+  Sound-locked messages, decided by an audio model that runs on your phone. No server. Your audio never leaves the device.
+</p>
 
-Write a sealed message, choose a sound ("you hear running water"), and send the link. The person
-who receives it has to go outside. A small audio model running inside their browser listens
-through the phone's microphone, and the letter unlocks only when the surroundings match.
+<p align="center">
+  <a href="https://open-when-gp8x.onrender.com">
+    <img src="https://img.shields.io/badge/Live%20demo-Render-46e3b7?style=for-the-badge&logo=render&logoColor=111827" alt="Live demo on Render" />
+  </a>
+  <img src="https://img.shields.io/badge/React-18-61dafb?style=for-the-badge&logo=react&logoColor=111827" alt="React 18" />
+  <img src="https://img.shields.io/badge/TypeScript-5-3178c6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript 5" />
+  <img src="https://img.shields.io/badge/Vite-5-646cff?style=for-the-badge&logo=vite&logoColor=white" alt="Vite 5" />
+  <img src="https://img.shields.io/badge/Model-CLAP%20audio-7a2b22?style=for-the-badge" alt="CLAP audio model" />
+  <img src="https://img.shields.io/badge/Inference-On%20device-2f7d4f?style=for-the-badge" alt="On-device inference" />
+  <a href="https://dev.to/challenges/hacktoberfest-week1-2026-10-05"><img src="https://img.shields.io/badge/Touch%20Grass-Week%201-f97316?style=for-the-badge" alt="Touch Grass" /></a>
+</p>
 
-**Live demo:** https://open-when-gp8x.onrender.com
+<p align="center">
+  <a href="#the-idea">The idea</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#run-it">Run it</a> ·
+  <a href="#privacy">Privacy</a> 
+</p>
+
+---
 
 ## The idea
 
@@ -27,7 +45,7 @@ mic -> 5 s audio windows -> CLAP audio model (in the browser) -> score vs. rival
 
 1. **Create:** write the message, pick a condition and a letter style. The letter is encoded into the link.
 2. **Open the link:** the message stays sealed. The recipient installs the model once (needs internet).
-3. **Listen:** the phone scores each window against the target sound _and_ competing sounds
+3. **Listen:** the phone scores each window against the target sound *and* competing sounds
    (traffic, wind, music...). A match needs a clear margin over the rivals, held for several seconds.
 4. **Unlock:** the screen shows a green confirmation, then the envelope opens.
 
