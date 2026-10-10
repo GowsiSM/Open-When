@@ -45,9 +45,166 @@ interface ClapAssets {
 
 let clapP: Promise<ClapAssets> | null = null;
 const subs = new Set<(p: Progress) => void>();
+const PARTS_CACHE = "open-when-model-parts";
 export const resetClap = () => {
   clapP = null;
 };
+
+function modelUrl() {
+  const modelPath = CONFIG.model.id;
+  return new URL(
+    `${import.meta.env.BASE_URL}models/${modelPath}/resolve/${CONFIG.model.revision}/${CONFIG.model.file}`,
+    location.origin,
+  );
+}
+
+function isQuantizedAudioModel(request: RequestInfo | URL) {
+  const url = request instanceof Request
+    ? new URL(request.url)
+    : new URL(String(request), location.href);
+  return url.href === modelUrl().href;
+}
+
+function reportModelProgress(loaded: number) {
+  const total = CONFIG.model.sizeBytes;
+  subs.forEach((callback) =>
+    callback({ loaded, total, pct: Math.round((loaded / total) * 100) }),
+  );
+}
+
+const modelFilename = CONFIG.model.file.slice(
+  CONFIG.model.file.lastIndexOf("/") + 1,
+);
+
+function partUrl(index: number) {
+  return new URL(
+    `${import.meta.env.BASE_URL}models/chunks/${CONFIG.model.revision}/${modelFilename}.part-${String(index).padStart(3, "0")}`,
+    location.origin,
+  );
+}
+
+async function modelResponse(): Promise<Response> {
+  const parts = await caches.open(PARTS_CACHE);
+  const chunkCount = Math.ceil(
+    CONFIG.model.sizeBytes / CONFIG.model.chunkSizeBytes,
+  );
+  let index = 0;
+  let loaded = 0;
+  const body = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      if (index === chunkCount) {
+        controller.close();
+        return;
+      }
+
+      const expected = Math.min(
+        CONFIG.model.chunkSizeBytes,
+        CONFIG.model.sizeBytes - index * CONFIG.model.chunkSizeBytes,
+      );
+      const url = partUrl(index);
+      const part = await parts.match(url);
+      let bytes: Uint8Array;
+      if (part) {
+        bytes = new Uint8Array(await part.arrayBuffer());
+      } else {
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(
+            `Model download failed for chunk ${index + 1}/${chunkCount} (${response.status} ${response.statusText}) at ${url.href}.`,
+          );
+        }
+        if (!response.body) {
+          throw new Error(`Model chunk ${index + 1}/${chunkCount} has no response body.`);
+        }
+        const reader = response.body.getReader();
+        const received: Uint8Array[] = [];
+        let receivedBytes = 0;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          received.push(value);
+          receivedBytes += value.length;
+          reportModelProgress(loaded + receivedBytes);
+        }
+        bytes = new Uint8Array(receivedBytes);
+        let offset = 0;
+        for (const block of received) {
+          bytes.set(block, offset);
+          offset += block.length;
+        }
+        if (bytes.length !== expected) {
+          throw new Error(
+            `Model chunk ${index + 1}/${chunkCount} was ${bytes.length} bytes; expected ${expected}.`,
+          );
+        }
+        const storedBytes = new ArrayBuffer(bytes.length);
+        new Uint8Array(storedBytes).set(bytes);
+        await parts.put(
+          url,
+          new Response(storedBytes, {
+            headers: { "Content-Length": String(bytes.length) },
+          }),
+        );
+      }
+
+      if (bytes.length !== expected) {
+        await parts.delete(url);
+        throw new Error(
+          `Cached model chunk ${index + 1}/${chunkCount} was ${bytes.length} bytes; expected ${expected}.`,
+        );
+      }
+      loaded += bytes.length;
+      reportModelProgress(loaded);
+      controller.enqueue(bytes);
+      index++;
+    },
+  });
+
+  return new Response(body, {
+    headers: {
+      "Content-Length": String(CONFIG.model.sizeBytes),
+      "Content-Type": "application/octet-stream",
+    },
+  });
+}
+
+const transformerCache = {
+  async match(request: RequestInfo | URL): Promise<Response | undefined> {
+    if (!isQuantizedAudioModel(request)) {
+      return (await caches.open("transformers-cache")).match(request);
+    }
+    const cache = await caches.open("transformers-cache");
+    return (await cache.match(request)) ?? modelResponse();
+  },
+  async put(request: RequestInfo | URL, response: Response): Promise<void> {
+    await (await caches.open("transformers-cache")).put(request, response);
+  },
+};
+
+export async function modelPartsInstalled(): Promise<boolean> {
+  try {
+    const parts = await caches.open(PARTS_CACHE);
+    const chunkCount = Math.ceil(
+      CONFIG.model.sizeBytes / CONFIG.model.chunkSizeBytes,
+    );
+    for (let index = 0; index < chunkCount; index++) {
+      const url = partUrl(index);
+      const part = await parts.match(url);
+      if (!part) return false;
+      const expected = Math.min(
+        CONFIG.model.chunkSizeBytes,
+        CONFIG.model.sizeBytes - index * CONFIG.model.chunkSizeBytes,
+      );
+      if (Number(part.headers.get("Content-Length")) !== expected) {
+        await parts.delete(url);
+        return false;
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -122,6 +279,13 @@ export function loadClap(onP?: (p: Progress) => void): Promise<ClapAssets> {
     const { AutoProcessor, ClapAudioModelWithProjection, env } =
       await import("@huggingface/transformers");
     env.allowLocalModels = false;
+    env.remoteHost = new URL(
+      `${import.meta.env.BASE_URL}models/`,
+      location.origin,
+    ).href;
+    env.remotePathTemplate = "{model}/resolve/{revision}/";
+    env.useCustomCache = true;
+    env.customCache = transformerCache;
     (env.backends.onnx as any).wasm.wasmPaths =
       import.meta.env.BASE_URL + "ort/"; // served locally: works offline
     const files: Record<string, [number, number]> = {};
@@ -135,9 +299,13 @@ export function loadClap(onP?: (p: Progress) => void): Promise<ClapAssets> {
       );
     };
     const [processor, audioModel, head] = await Promise.all([
-      AutoProcessor.from_pretrained(CONFIG.model.id, { progress_callback }),
+      AutoProcessor.from_pretrained(CONFIG.model.id, {
+        revision: CONFIG.model.revision,
+        progress_callback,
+      }),
       ClapAudioModelWithProjection.from_pretrained(CONFIG.model.id, {
         dtype: CONFIG.model.dtype,
+        revision: CONFIG.model.revision,
         progress_callback,
       }),
       loadLinearHead(),
@@ -259,9 +427,10 @@ export const createMatcher = (): AudioMatcher =>
 export async function modelInstalled(): Promise<boolean> {
   try {
     if (new URLSearchParams(location.search).has("mock")) return true;
+    if (await modelPartsInstalled()) return true;
     const keys = await (await caches.open("transformers-cache")).keys();
     return keys.some(
-      (k) => k.url.includes(CONFIG.model.id) && k.url.includes(".onnx"),
+      (k) => k.url.includes(CONFIG.model.id) && k.url.includes(CONFIG.model.file),
     );
   } catch {
     return false;

@@ -4,6 +4,9 @@
 open-weight audio model listens through your phone's microphone and unlocks the letter when
 the world matches. The AI never writes the message and the audio never leaves the device.
 
+Live app: https://open-when-gp8x.onrender.com
+Description: A private, offline-capable letter that opens when your phone hears a chosen sound.
+
 ```
 mic -> Audio Engine (5s windows) -> AudioMatcher (CLAP, local) -> score
     -> Detector (smoothing + N-of-M + sustained 4s + cooldown) -> State machine -> unlock
@@ -19,21 +22,23 @@ no audio upload, no server dependency, no per-call cost, and a model you can swa
 npm install
 npm run dev:https   # self-signed HTTPS so a phone on your Wi-Fi gets microphone access
 npm test            # cards, conditions, detector, state machine, layout theme, run log, matcher
-npm run build       # static dist/ (deploy to Vercel/Netlify); set VITE_PUBLIC_URL for share links
+npm run build       # downloads pinned model assets and builds static dist/
 ```
-`predev`/`prebuild` copy the ONNX runtime wasm to `public/ort` so inference never needs a CDN.
+`predev`/`prebuild` prepare local ONNX runtime wasm and model chunks; both are ignored by Git.
 
 ## Offline
-After one online visit: the app shell is cached by `public/sw.js`, the model by Transformers.js
-(Cache API), the wasm by the service worker. The Ready screen reports model state honestly
+After one online visit: the app shell is cached by `public/sw.js`, model chunks by the app's Cache API,
+the wasm by the service worker. The Ready screen reports model state honestly
 ("Not installed", needs network once). Letters and the in-progress session persist in localStorage;
 a reload mid-walk returns to Ready with the session clock intact (a mic needs a fresh tap).
 
 ## Installing the model (in-app)
 **Local AI** (top bar, or Install on the Ready screen) installs CLAP into the browser cache with real
-byte progress, then works offline. Handles offline, no storage, unsupported browser, interrupted
-download (retry keeps finished files), and corruption (Remove & retry). `src/models.ts` is the
-registry: condition mode -> required model. Only the model a condition needs is installed.
+byte progress, then works offline. The app uses the 34.3 MB quantized audio-only ONNX weights.
+The download is split into 4 MiB chunks; completed chunks persist between retries, so an interruption
+restarts at most the current chunk. The install screen shows the underlying failure text. Handles
+offline, no storage, unsupported browser, interrupted download, and corruption (Remove & retry).
+`src/models.ts` is the registry: condition mode -> required model. Only the model a condition needs is installed.
 SEE / FIND / Gemma-based condition parsing are listed as **planned** and are not implemented.
 
 ## Theme
@@ -53,8 +58,10 @@ The project is a static Vite app; Render does not need a server or database.
 
 1. Push this project to a GitHub repository.
 2. In Render, choose **New + → Blueprint**, connect the repository, and let Render read `render.yaml`.
+   The build downloads the pinned model into ignored build output and splits it into static chunks;
+   no model weights are committed to Git.
    Or create a **Static Site** manually with build command `npm ci && npm run build` and publish
-   directory `dist`.
+   directory `dist`. The build lifecycle downloads and prepares the pinned model automatically.
 3. Wait for the build to finish, open the generated `https://...onrender.com` URL, and create a test
    letter. Share its generated link with another phone to check the full flow.
 4. Microphone access requires HTTPS. On the receiving phone, allow microphone access and install the
@@ -75,8 +82,14 @@ training data or tuned weights are included. Follow [MODEL_FINE_TUNING.md](./MOD
 to collect/evaluate responsibly and start with calibration before training.
 
 ## Model
-`Xenova/clap-htsat-unfused` (ONNX conversion of LAION CLAP), loaded `q8`. Upstream `laion/clap-htsat-unfused` lists Apache-2.0 on its model page; the Xenova ONNX conversion's own license field could not be read, so check it before redistributing. Size, latency and accuracy are **not yet measured**: check the model card, then fill in
-real numbers from `?debug` on your phone. Weak spots expected: faint targets, wind, overlapping sounds.
+`Xenova/clap-htsat-unfused` (ONNX conversion of LAION CLAP), loaded `q8`. This app loads
+`onnx/audio_model_quantized.onnx` (34.3 MB / 34,301,667 bytes), not the 161.0 MB
+`onnx/model_quantized.onnx` file, which contains the combined model and is not used by the app.
+LAION's base model declares Apache-2.0; the Xenova conversion's model card has no license field,
+so the conversion's separate licensing is unspecified. The repository's MIT license applies to
+the app code, not the model weights. Latency and accuracy are **not yet measured**: check the
+model card, then fill in real numbers from `?debug` on your phone. Weak spots expected: faint
+targets, wind, overlapping sounds.
 
 ## Debug / field test
 `?debug` (or the Debug button while listening): mic state and rate, RMS, inference ms, the full score
@@ -99,5 +112,4 @@ None of this has been tested on a real phone yet.
 - Only single "hear" conditions run; the condition model already types SEE/FIND/REACH/THEN (`src/condition.ts`) but rejects them.
 - Thresholds in `src/config.ts` are uncalibrated placeholders.
 - The CLAP model expects 48 kHz audio (`CONFIG.model.sampleRate`); do not "fix" this to 16 kHz.
-- Model download size is not measured; the UI shows the real size while installing.
 - Link payload lives in the URL hash (never sent to a server) but anyone with the link can read the message.

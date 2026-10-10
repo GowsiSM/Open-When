@@ -96,9 +96,15 @@ describe("model registry", () => {
     expect(modelFor("hear")?.id).toBe("clap"); expect(modelFor("see")).toBeNull(); expect(modelFor("find")).toBeNull();
     expect(MODELS.filter((m) => m.recommended)).toHaveLength(1);
   });
+  it("reports the actual audio-only quantized weight size", () => {
+    expect(CONFIG.model.file).toBe("onnx/audio_model_quantized.onnx");
+    expect(CONFIG.model.sizeBytes).toBe(34301667);
+    expect(MODELS[0].estMB).toBe(34.3);
+  });
   it("classifies install failures", () => {
     expect(classify({ name: "QuotaExceededError" }, true).kind).toBe("storage");
-    expect(classify(new Error("Failed to fetch"), false).kind).toBe("offline");
+    expect(classify(new Error("Failed to fetch"), false).message).toContain("Failed to fetch");
+    expect(classify(new Error("Model chunk returned HTTP 404"), true).message).toContain("HTTP 404");
     expect(classify(new Error("boom"), true).kind).toBe("failed");
     expect(classify(new ModelError("unsupported", "x"), true).kind).toBe("unsupported");
   });

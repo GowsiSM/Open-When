@@ -5,7 +5,7 @@ import { Card, LETTER_THEMES, LetterTheme, cardFromHash, cardUrl, conditionPhras
 import { resolveCondition } from "./conditionConfig";
 import { AudioEngine, normalize, resample, rms, sfx } from "./audio";
 import { AudioMatcher, MatchResult, Progress, createMatcher, modelInstalled } from "./matcher";
-import { IMPROVEMENT, MODELS, ModelError, PRIVACY, modelState, classify, installModel, installedBytes, modelFor, removeModel } from "./models";
+import { IMPROVEMENT, MODELS, ModelError, PRIVACY, modelState, classify, installModel, modelFor, removeModel } from "./models";
 import { Detector, Level } from "./detector";
 import { parseCondition } from "./condition";
 import { Ctx, Ev, INITIAL, Phase, inField, recover, reduce } from "./machine";
@@ -193,7 +193,7 @@ function Ready({ card, ctx, installed, online, onBegin, onLeave, onInstall }: { 
   );
 }
 
-const mb = (b: number) => (b / 1048576).toFixed(b < 1e7 ? 1 : 0) + " MB";
+const mb = (b: number) => (b / 1_000_000).toFixed(1) + " MB";
 const ERR_HELP: Record<string, string> = { offline: "Connect and retry. Files already downloaded are kept.", storage: "Free some space on this device, then retry.", unsupported: "Try a current Chrome, Edge, Safari or Firefox over HTTPS.", failed: "If it keeps failing, remove the model and install again." };
 
 function Models({ online, onClose }: { online: boolean; onClose: () => void }) {
@@ -206,7 +206,6 @@ function Models({ online, onClose }: { online: boolean; onClose: () => void }) {
     try { await installModel(setProg); await refresh(); } catch (e) { setErr(classify(e, navigator.onLine)); } finally { setBusy(false); }
   };
   const remove = async () => { await removeModel(); setErr(null); refresh(); };
-  const size = installedBytes();
   return (
     <section className="stack models" aria-label="Local AI">
       <p className="label">Your field AI</p>
@@ -218,7 +217,7 @@ function Models({ online, onClose }: { online: boolean; onClose: () => void }) {
           <h2 className="mname">{m.name} <span className="dim">/ {m.tagline}</span></h2>
           <dl className="meta">
             <dt>Status</dt><dd>{!m.available ? "Not available yet" : installed === null ? "Checking…" : busy ? "Downloading" : installed ? "Installed" : "Not installed"}</dd>
-            <dt>Size</dt><dd>{installed && size ? mb(size) + " on device" : m.available ? "Shown while installing (not measured yet)" : "tbd"}</dd>
+            <dt>Size</dt><dd>{m.available && m.estMB !== null ? `${m.estMB.toFixed(1)} MB audio weights` : "tbd"}</dd>
             <dt>Runs</dt><dd>{m.available ? "On device" : "tbd"}</dd>
             <dt>Network</dt><dd>{m.available ? "Only for first install" : "n/a"}</dd>
             <dt>License</dt><dd>{m.license}</dd>

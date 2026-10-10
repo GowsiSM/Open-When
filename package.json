@@ -6,12 +6,13 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "model:download": "node scripts/download-model.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "dev:https": "vite --mode https",
-    "predev": "node scripts/copy-ort.mjs",
-    "prebuild": "node scripts/copy-ort.mjs",
-    "predev:https": "node scripts/copy-ort.mjs"
+    "predev": "node scripts/copy-ort.mjs && node scripts/download-model.mjs",
+    "prebuild": "node scripts/copy-ort.mjs && node scripts/download-model.mjs",
+    "predev:https": "node scripts/copy-ort.mjs && node scripts/download-model.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.0.0",

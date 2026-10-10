@@ -2,6 +2,10 @@
 export const CONFIG = {
   model: {
     id: "Xenova/clap-htsat-unfused", // open-weight CLAP, runs in-browser
+    revision: "c28f2883575e590e04d3146ff0713c2448d691ba",
+    file: "onnx/audio_model_quantized.onnx",
+    sizeBytes: 34301667,
+    chunkSizeBytes: 4 * 1024 * 1024,
     dtype: "q8" as const, // quantized weights: smaller download, faster on phones
     sampleRate: 48000,
     template: "This is a sound of {}.",
