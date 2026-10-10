@@ -1,4 +1,4 @@
-// Model registry: which local model each condition type needs, and how it is installed.
+// Model registry: which local model the supported condition type needs, and how it is installed.
 import { CONFIG } from "./config";
 import type { Mode } from "./condition";
 import { loadClap, modelInstalled, resetClap, Progress } from "./matcher";
@@ -11,12 +11,6 @@ export const MODELS: ModelInfo[] = [
   { id: "clap", name: "CLAP", tagline: "Environmental audio", mode: "hear", hfId: CONFIG.model.id,
     sourceUrl: "https://huggingface.co/" + CONFIG.model.id, license: "Apache-2.0 (upstream laion/clap-htsat-unfused)", estMB: null, recommended: true, available: true,
     why: "CLAP matches sounds to written descriptions, which is what turns “open when you hear running water” into a detection task. It runs on your device; audio is never uploaded. License: the upstream LAION model page lists Apache-2.0; the Xenova ONNX conversion Open When downloads has its own page, whose license field I could not read, so check it before redistributing." },
-  { id: "vision", name: "Vision model", tagline: "SEE conditions (planned)", mode: "see", hfId: "", sourceUrl: "", license: "tbd", estMB: null, recommended: false, available: false,
-    why: "For “open when you see a sunset”. Not shipped: no phone-reliable model chosen yet." },
-  { id: "ocr", name: "Text / OCR model", tagline: "FIND conditions (planned)", mode: "find", hfId: "", sourceUrl: "", license: "tbd", estMB: null, recommended: false, available: false,
-    why: "For “open when you find a sign saying RIVER”. Not shipped." },
-  { id: "gemma", name: "Gemma", tagline: "Condition parsing (planned)", mode: "parse", hfId: "", sourceUrl: "https://ai.google.dev/gemma", license: "Gemma terms", estMB: null, recommended: false, available: false,
-    why: "Would turn “it's raining really hard” into a structured condition (target “heavy rain”, rivals “light rain”, “wind”). CLAP would still do the listening." },
 ];
 /** Which model does a condition mode need? */
 export const modelFor = (mode: Mode) => MODELS.find((m) => m.mode === mode && m.available) ?? null;
