@@ -1,115 +1,93 @@
 # Open When
 
-**The world is the password.** Write a sealed message, choose a sound, go outside. A local
-open-weight audio model listens through your phone's microphone and unlocks the letter when
-the world matches. The AI never writes the message and the audio never leaves the device.
+**A letter that only opens when the world says so.**
 
-Live app: https://open-when-gp8x.onrender.com
-Description: A private, offline-capable letter that opens when your phone hears a chosen sound.
+Write a sealed message, choose a sound ("you hear running water"), and send the link. The person
+who receives it has to go outside. A small audio model running inside their browser listens
+through the phone's microphone, and the letter unlocks only when the surroundings match.
+
+**Live demo:** https://open-when-gp8x.onrender.com
+
+## The idea
+
+Most "go outside" apps tell you to go outside. Open When gives you a reason: someone left you
+something, and the only key is a place.
+
+- **The world is the key.** There is no timer, button or password. The real environment is the trigger.
+- **The AI never writes the message.** It only listens and decides whether the sound is present.
+- **The audio never leaves the device.** Listening happens in short windows in memory and is discarded.
+- **No server.** The letter lives in the link itself (the URL hash). There is no database, account or backend.
+
+## How it works
 
 ```
-mic -> Audio Engine (5s windows) -> AudioMatcher (CLAP, local) -> score
-    -> Detector (smoothing + N-of-M + sustained 4s + cooldown) -> State machine -> unlock
+mic -> 5 s audio windows -> CLAP audio model (in the browser) -> score vs. rival sounds
+    -> smoothing + sustained-signal check -> confirmed -> letter opens
 ```
 
-## Why local, open-weight AI
-The input is the environment, which is private. People walk out of signal. Local inference means
-no audio upload, no server dependency, no per-call cost, and a model you can swap
-(`src/matcher.ts` is the only file that knows which model runs).
+1. **Create:** write the message, pick a condition and a letter style. The letter is encoded into the link.
+2. **Open the link:** the message stays sealed. The recipient installs the model once (needs internet).
+3. **Listen:** the phone scores each window against the target sound _and_ competing sounds
+   (traffic, wind, music...). A match needs a clear margin over the rivals, held for several seconds.
+4. **Unlock:** the screen shows a green confirmation, then the envelope opens.
 
-## Run
-```bash
-npm install
-npm run dev:https   # self-signed HTTPS so a phone on your Wi-Fi gets microphone access
-npm test            # cards, conditions, detector, state machine, layout theme, run log, matcher
-npm run build       # downloads pinned model assets and builds static dist/
-```
-`predev`/`prebuild` prepare local ONNX runtime wasm and model chunks; both are ignored by Git.
-
-## Offline
-After one online visit: the app shell is cached by `public/sw.js`, model chunks by the app's Cache API,
-the wasm by the service worker. The Ready screen reports model state honestly
-("Not installed", needs network once). Letters and the in-progress session persist in localStorage;
-a reload mid-walk returns to Ready with the session clock intact (a mic needs a fresh tap).
-
-## Installing the model (in-app)
-**Local AI** (top bar, or Install on the Ready screen) installs CLAP into the browser cache with real
-byte progress, then works offline. The app uses the 34.3 MB quantized audio-only ONNX weights.
-The download is split into 4 MiB chunks; completed chunks persist between retries, so an interruption
-restarts at most the current chunk. The install screen shows the underlying failure text. Handles
-offline, no storage, unsupported browser, interrupted download, and corruption (Remove & retry).
-`src/models.ts` is the registry: condition mode -> required model. Only the model a condition needs is installed.
-SEE / FIND / Gemma-based condition parsing are listed as **planned** and are not implemented.
-
-## Theme
-The regular interface stays light. Letter styles change their paper, ink, type and ornaments, not the
-global theme. Active listening uses a dark, low-distraction screen for every letter style and returns
-to the selected letter palette when listening ends. The confirmation signal turns green before the
-app advances to the letter-opening screen.
+Model: `Xenova/clap-htsat-unfused` (an ONNX conversion of LAION's CLAP), run with
+[Transformers.js](https://github.com/huggingface/transformers.js), quantized to 8-bit. The model file is
+about 161 MB, installed once and cached for offline use.
 
 ## Letter styles
-Three styles, chosen when creating a letter and stored in the link: **The old letter** (warm paper, wax seal), **Field letter** (notebook paper, "open outside", line sketches), **Dove / memory** (slate-blue, a line-art dove on the seal, a small marker while listening, and a brief pass when the letter opens). Styles change only CSS variables and ornaments; the state machine and detector are shared. Fonts are system stacks (works offline); the handwriting accent depends on the device's script fonts. Field mode forces a dark screen for every style.
 
-## Detection improvements
-`src/conditionConfig.ts`: per-condition prompt ensembles, rivals, margin, and detector overrides (`resolveCondition`, `aggregate`). Unmeasured; see `MODEL_FINE_TUNING.md`.
+Chosen when you create a letter and stored in the link. Styles change only paper, ink, type and
+ornaments, never the logic.
 
-## Deploy to Render
-The project is a static Vite app; Render does not need a server or database.
+- **The old letter:** warm paper, ink-brown text, a muted wax seal.
+- **Field letter:** notebook paper, an "open outside" note, a line sketch matched to the sound.
+- **Dove / memory:** slate-blue paper and a dove that waits while you listen and flies off when the sound is found.
 
-1. Push this project to a GitHub repository.
-2. In Render, choose **New + → Blueprint**, connect the repository, and let Render read `render.yaml`.
-   The build downloads the pinned model into ignored build output and splits it into static chunks;
-   no model weights are committed to Git.
-   Or create a **Static Site** manually with build command `npm ci && npm run build` and publish
-   directory `dist`. The build lifecycle downloads and prepares the pinned model automatically.
-3. Wait for the build to finish, open the generated `https://...onrender.com` URL, and create a test
-   letter. Share its generated link with another phone to check the full flow.
-4. Microphone access requires HTTPS. On the receiving phone, allow microphone access and install the
-   local AI model once while online; later listening works offline if the browser keeps the model cache.
-5. If using a custom domain or a non-root base path, set `VITE_PUBLIC_URL` to the public app URL before
-   building so shared letter links point to the correct address. For the default Render URL, the app
-   uses its current origin automatically.
+While listening, the screen goes dark and nearly blank for every style so the phone can stay in a pocket.
 
-The supplied `render.yaml` is a deployment configuration, not a live deployment; verify the first
-Render build and test microphone permissions on a real phone.
+## Run it
 
-## Improving / fine-tuning the model
-Vision (SEE), OCR (FIND), and Gemma condition parsing are explicitly **not implemented**. The model
-registry marks them unavailable; no camera permissions or unsupported model downloads are implied.
-CLAP prompt ensembles and per-condition calibration are implemented but unmeasured. Fine-tuning
-requires consented, labelled positive and hard-negative recordings plus held-out evaluation data; no
-training data or tuned weights are included. Follow [MODEL_FINE_TUNING.md](./MODEL_FINE_TUNING.md)
-to collect/evaluate responsibly and start with calibration before training.
+```bash
+npm install
+npm run dev:https   # HTTPS is required for the microphone, including on a phone over Wi-Fi
+npm test
+npm run build       # static output in dist/
+```
 
-## Model
-`Xenova/clap-htsat-unfused` (ONNX conversion of LAION CLAP), loaded `q8`. This app loads
-`onnx/audio_model_quantized.onnx` (34.3 MB / 34,301,667 bytes), not the 161.0 MB
-`onnx/model_quantized.onnx` file, which contains the combined model and is not used by the app.
-LAION's base model declares Apache-2.0; the Xenova conversion's model card has no license field,
-so the conversion's separate licensing is unspecified. The repository's MIT license applies to
-the app code, not the model weights. Latency and accuracy are **not yet measured**: check the
-model card, then fill in real numbers from `?debug` on your phone. Weak spots expected: faint
-targets, wind, overlapping sounds.
+Microphone access needs HTTPS (or `localhost`). Set `VITE_PUBLIC_URL` before building if the
+public address differs from the current origin, so shared links point to the right place.
 
-## Debug / field test
-`?debug` (or the Debug button while listening): mic state and rate, RMS, inference ms, the full score
-breakdown vs rival sounds, margin, smoothed score, detector hits. "Score a sound file" separates
-capture problems from model problems. `?mock=1` swaps in a loudness matcher for UI testing.
+## Deploy
 
-## Field calibration log
-In `?debug`, type where you are (e.g. "stream near bridge"), then **Copy log (CSV)** or **Download**.
-One row per scored window: rms, raw, score, margin, smoothed, hits, level, inference ms, top label.
-Use it to fill the results tables in `MODEL_FINE_TUNING.md`; it stays in memory and is never uploaded.
+It is a static site. On Render, create a **Static Site** with build command `npm ci && npm run build`
+and publish directory `dist`, or use the included `render.yaml`. Then open the HTTPS URL on a phone
+and test the full flow outdoors.
 
-## Audio robustness
-The wake lock is re-requested when the page becomes visible again (the OS drops it when hidden), the
-AudioContext is resumed after iOS-style interruptions, and a lost microphone track shows a clear message.
-None of this has been tested on a real phone yet.
+## Debug and field testing
 
-## Limits
-- Locked screens can suspend mic capture in mobile browsers; a screen wake lock is requested, so keep the screen on in your pocket.
-- Haptics: Android only. iOS gets audio cues.
-- Only single "hear" conditions run; the condition model already types SEE/FIND/REACH/THEN (`src/condition.ts`) but rejects them.
-- Thresholds in `src/config.ts` are uncalibrated placeholders.
-- The CLAP model expects 48 kHz audio (`CONFIG.model.sampleRate`); do not "fix" this to 16 kHz.
-- Link payload lives in the URL hash (never sent to a server) but anyone with the link can read the message.
+Open the app with `?debug` to see the microphone state, signal level, per-sound scores, the margin
+over rival sounds, detector hits and inference time. You can copy or download a CSV log of a session,
+which is how thresholds should be calibrated. `?mock=1` swaps in a loudness-based matcher for UI testing.
+
+## Privacy
+
+- Microphone audio is analysed locally and not uploaded or stored.
+- A letter's text is inside its link, so anyone who has the link can read the message. Share it with care.
+- The internet is used only to install the model once. There is no analytics or tracking.
+
+## Origin and credit
+
+Open When was designed and built by **GowsiSM**. The concept, the sealed-letter flow, and the
+world-as-key mechanic originate here. If you build on this project or adapt the idea, please link
+back to this repository and credit the original.
+
+## Acknowledgements
+
+- [LAION CLAP](https://huggingface.co/laion/clap-htsat-unfused), the audio-text model.
+- [Xenova](https://huggingface.co/Xenova/clap-htsat-unfused), for the ONNX conversion.
+- [Transformers.js](https://github.com/huggingface/transformers.js), for in-browser inference.
+
+## License
+
+Add a `LICENSE` file before sharing this publicly (see the note in your repo's checklist).
